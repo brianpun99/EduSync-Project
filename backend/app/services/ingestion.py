@@ -2,7 +2,7 @@
 Local ingestion & retrieval layer (Section 2.3 of the system design doc).
 
 Everything in this module runs entirely offline:
-  1. Text extraction  -- PyMuPDF (PDF) / python-pptx (PPTX)
+  1. Text extraction  -- PyMuPDF (PDF)
   2. Semantic chunking -- LangChain's RecursiveCharacterTextSplitter
   3. Vector storage    -- a local, on-disk ChromaDB instance (no network calls)
 
@@ -15,7 +15,6 @@ from typing import List
 import chromadb
 import fitz  # PyMuPDF
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pptx import Presentation
 
 from app.config import CHROMA_DIR, CHUNK_OVERLAP, CHUNK_SIZE, RETRIEVAL_TOP_K
 
@@ -48,25 +47,10 @@ def extract_text_pdf(file_path: Path) -> tuple[str, int]:
     return text, page_count
 
 
-def extract_text_pptx(file_path: Path) -> tuple[str, int]:
-    prs = Presentation(file_path)
-    slides_text = []
-    for slide in prs.slides:
-        parts = [
-            shape.text_frame.text
-            for shape in slide.shapes
-            if shape.has_text_frame and shape.text_frame.text.strip()
-        ]
-        slides_text.append("\n".join(parts))
-    return "\n\n".join(slides_text), len(prs.slides)
-
-
 def extract_text(file_path: Path) -> tuple[str, int]:
     suffix = file_path.suffix.lower()
     if suffix == ".pdf":
         return extract_text_pdf(file_path)
-    if suffix == ".pptx":
-        return extract_text_pptx(file_path)
     raise ValueError(f"Unsupported file type: {suffix}")
 
 

@@ -137,7 +137,7 @@ export default function SubjectsPage() {
             ref={fileInputRef} 
             className="hidden" 
             onChange={handleFileChange}
-            accept=".pdf,.pptx"
+            accept=".pdf"
           />
         </div>
 
@@ -148,7 +148,7 @@ export default function SubjectsPage() {
         >
           <div className="flex flex-col items-center gap-2">
             <FileText className="w-10 h-10 text-muted-foreground" />
-            <p className="text-foreground font-medium">Drop PDF or PPTX files here or click to upload</p>
+            <p className="text-foreground font-medium">Drop PDF files here or click to upload</p>
             <p className="text-sm text-muted-foreground">Max File Size: <span className="font-bold text-yellow-500">10MB</span></p>
           </div>
         </div>

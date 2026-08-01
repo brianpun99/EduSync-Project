@@ -37,10 +37,9 @@ ALLOWED_ORIGINS = [
 # --- FR-02: Structural File Validation ----------------------------------
 MAX_UPLOAD_MB = 10
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
-ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".pptx"}
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf"}
 ALLOWED_UPLOAD_CONTENT_TYPES = {
     "application/pdf",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 
 # --- NFR-02: System Stability (vector storage ceiling) -------------------

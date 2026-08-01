@@ -90,7 +90,6 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     };
   }, [subjectId, documentId]);
 
-  const isPdf = fileType?.includes("pdf") || docMeta?.filename?.toLowerCase().endsWith(".pdf");
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
@@ -163,7 +162,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
           </div>
 
           {/* PDF Controls */}
-          {isPdf && numPages > 0 && (
+          {numPages > 0 && (
             <div className="flex items-center gap-1">
               {/* Zoom */}
               <Button
@@ -187,11 +186,10 @@ export default function StudyWorkspacePage({ params }: PageProps) {
               </Button>
             </div>
           )}
-          {!isPdf && <div className="w-20" />}
         </div>
 
         {/* Page Navigation */}
-        {isPdf && numPages > 0 && (
+        {numPages > 0 && (
           <div className="flex items-center justify-center gap-3 px-4 py-2 border-b border-border bg-card/50">
             <Button
               variant="outline"
@@ -248,7 +246,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
             </div>
           )}
 
-          {pdfUrl && isPdf && (
+          {pdfUrl && (
             <Document
               file={pdfUrl}
               onLoadSuccess={onDocumentLoadSuccess}
@@ -276,20 +274,6 @@ export default function StudyWorkspacePage({ params }: PageProps) {
             </Document>
           )}
 
-          {pdfUrl && !isPdf && (
-            <div className="flex items-center justify-center h-full text-muted-foreground p-8 text-center">
-              <div>
-                <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p className="font-medium">
-                  PPTX preview is not supported in the browser.
-                </p>
-                <p className="text-sm mt-1">
-                  The document has been processed and you can ask questions about
-                  it using the AI assistant on the right.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

@@ -220,7 +220,6 @@ def serve_document_file(
     suffix = file_path.suffix.lower()
     media_types = {
         ".pdf": "application/pdf",
-        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     }
     return FileResponse(
         path=file_path,
