@@ -8,6 +8,10 @@ of the codebase never hardcodes a limit in more than one place.
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env from the backend root (one level up from this file's parent)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # --- Paths -------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent

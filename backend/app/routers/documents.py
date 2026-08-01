@@ -195,3 +195,35 @@ def delete_document(
 
     file_path = UPLOAD_DIR / f"subj{subject_id}_{doc['filename']}"
     file_path.unlink(missing_ok=True)
+
+
+@router.get("/{subject_id}/documents/{document_id}/file")
+def serve_document_file(
+    subject_id: int,
+    document_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+    _user_id: int = Depends(require_auth),
+):
+    """Serve the raw uploaded file so the frontend can render it (e.g. PDF viewer)."""
+    from fastapi.responses import FileResponse
+
+    doc = db.execute(
+        "SELECT filename FROM documents WHERE id = ? AND subject_id = ?", (document_id, subject_id)
+    ).fetchone()
+    if doc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found.")
+
+    file_path = UPLOAD_DIR / f"subj{subject_id}_{doc['filename']}"
+    if not file_path.exists():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found on disk.")
+
+    suffix = file_path.suffix.lower()
+    media_types = {
+        ".pdf": "application/pdf",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    }
+    return FileResponse(
+        path=file_path,
+        filename=doc["filename"],
+        media_type=media_types.get(suffix, "application/octet-stream"),
+    )
