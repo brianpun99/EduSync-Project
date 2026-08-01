@@ -63,8 +63,9 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     },
   });
 
-  // Build the PDF URL with auth token
+  // Build the document URL with auth token
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [fileType, setFileType] = useState<string | null>(null);
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) return;
@@ -75,7 +76,9 @@ export default function StudyWorkspacePage({ params }: PageProps) {
         responseType: "blob",
       })
       .then((res) => {
-        const blob = new Blob([res.data], { type: "application/pdf" });
+        const contentType = res.headers["content-type"] || "application/octet-stream";
+        setFileType(contentType);
+        const blob = new Blob([res.data], { type: contentType });
         setPdfUrl(URL.createObjectURL(blob));
       })
       .catch(() => {
@@ -87,7 +90,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     };
   }, [subjectId, documentId]);
 
-  const isPdf = docMeta?.filename?.toLowerCase().endsWith(".pdf");
+  const isPdf = fileType?.includes("pdf") || docMeta?.filename?.toLowerCase().endsWith(".pdf");
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
