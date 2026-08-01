@@ -93,6 +93,12 @@ def delete_document_vectors(subject_id: int, document_id: int) -> None:
     collection = get_collection(subject_id)
     collection.delete(where={"document_id": document_id})
 
+def delete_subject_vectors(subject_id: int) -> None:
+    try:
+        _chroma_client.delete_collection(name=_collection_name(subject_id))
+    except Exception:
+        pass
+
 
 def estimate_subject_storage_mb(subject_id: int) -> float:
     """

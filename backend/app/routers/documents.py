@@ -25,6 +25,7 @@ from app.schemas import DocumentOut, SubjectCreate, SubjectOut
 from app.security import require_auth
 from app.services.ingestion import (
     delete_document_vectors,
+    delete_subject_vectors,
     estimate_subject_storage_mb,
     ingest_document,
 )
@@ -86,6 +87,31 @@ def list_subjects(
             )
         )
     return result
+
+
+@router.delete("/{subject_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_subject(
+    subject_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+    _user_id: int = Depends(require_auth),
+):
+    subject = db.execute("SELECT id FROM subjects WHERE id = ?", (subject_id,)).fetchone()
+    if subject is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Subject not found.")
+
+    # 1. Delete all document files from disk
+    docs = db.execute("SELECT filename FROM documents WHERE subject_id = ?", (subject_id,)).fetchall()
+    for doc in docs:
+        file_path = UPLOAD_DIR / f"subj{subject_id}_{doc['filename']}"
+        file_path.unlink(missing_ok=True)
+
+    # 2. Delete subject vectors from ChromaDB
+    delete_subject_vectors(subject_id)
+
+    # 3. Delete from DB (cascade handles child documents/topics)
+    db.execute("DELETE FROM documents WHERE subject_id = ?", (subject_id,))
+    db.execute("DELETE FROM topics WHERE subject_id = ?", (subject_id,))
+    db.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
 
 
 @router.get("/{subject_id}/documents", response_model=list[DocumentOut])

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FolderOpen, FileText, Search, Plus, ChevronRight, BookOpen, HardDrive } from "lucide-react";
+import { FolderOpen, FileText, Search, Plus, ChevronRight, BookOpen, HardDrive, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -79,6 +79,26 @@ export default function SubjectsPage() {
     }
   });
 
+  const deleteSubjectMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/subjects/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      setSelectedSubject(null);
+    },
+  });
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      await api.delete(`/subjects/${selectedSubject}/documents/${docId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents', selectedSubject] });
+      queryClient.invalidateQueries({ queryKey: ['subjects'] });
+    },
+  });
+
   const handleCreateSubject = () => {
     const name = prompt("Enter subject name:");
     if (name) {
@@ -124,14 +144,29 @@ export default function SubjectsPage() {
             <h1 className="text-2xl font-bold text-foreground">{currentSubject.name}</h1>
             <p className="text-muted-foreground">{currentSubject.document_count} documents</p>
           </div>
-          <Button 
-            className="bg-primary hover:bg-primary/90"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploadDocumentMutation.isPending}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {uploadDocumentMutation.isPending ? "Uploading..." : "Add Document"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="destructive"
+              className="bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white"
+              onClick={() => {
+                if (confirm(`Are you sure you want to delete ${currentSubject.name}? This will delete all its documents and vectors.`)) {
+                  deleteSubjectMutation.mutate(currentSubject.id);
+                }
+              }}
+              disabled={deleteSubjectMutation.isPending}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Subject
+            </Button>
+            <Button 
+              className="bg-primary hover:bg-primary/90"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadDocumentMutation.isPending}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {uploadDocumentMutation.isPending ? "Uploading..." : "Add Document"}
+            </Button>
+          </div>
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -195,7 +230,22 @@ export default function SubjectsPage() {
                         <span className="text-xs font-medium capitalize">Status: {doc.status}</span>
                       </div>
                     </div>
-                    {doc.status === 'vectorized' && <ChevronRight className="w-5 h-5 text-muted-foreground" />}
+                    <div className="flex items-center gap-2">
+                      {doc.status === 'vectorized' && <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-400 hover:text-red-500 hover:bg-red-500/10 z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Are you sure you want to delete ${doc.filename}?`)) {
+                            deleteDocumentMutation.mutate(doc.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
