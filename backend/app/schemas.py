@@ -141,6 +141,10 @@ class QuizHistoryEntry(BaseModel):
 
 
 class AnalyticsOverviewOut(BaseModel):
+    total_subjects: int
+    total_documents: int
+    total_quizzes_taken: int
+    average_quiz_score: float
     quiz_score_trend: List[QuizHistoryEntry]
     strong_count: int
     good_count: int

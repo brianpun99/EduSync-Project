@@ -50,6 +50,14 @@ def overview(
     db: sqlite3.Connection = Depends(get_db),
     _user_id: int = Depends(require_auth),
 ):
+    # Counts
+    total_subjects = db.execute("SELECT COUNT(*) AS c FROM subjects").fetchone()["c"]
+    total_documents = db.execute("SELECT COUNT(*) AS c FROM documents").fetchone()["c"]
+    total_quizzes = db.execute("SELECT COUNT(*) AS c FROM quiz_history").fetchone()["c"]
+    avg_score_row = db.execute("SELECT AVG(score) AS avg FROM quiz_history").fetchone()
+    avg_score = round(avg_score_row["avg"] or 0.0, 1)
+
+    # Per-quiz trend
     trend_rows = db.execute(
         """
         SELECT qh.taken_at AS date, s.name AS subject, t.name AS topic, qh.score AS score
@@ -71,6 +79,10 @@ def overview(
     ).fetchone()
 
     return AnalyticsOverviewOut(
+        total_subjects=total_subjects,
+        total_documents=total_documents,
+        total_quizzes_taken=total_quizzes,
+        average_quiz_score=avg_score,
         quiz_score_trend=[QuizHistoryEntry(**dict(r)) for r in trend_rows],
         strong_count=tier_counts["strong"] or 0,
         good_count=tier_counts["good"] or 0,
