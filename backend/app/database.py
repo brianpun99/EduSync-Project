@@ -87,6 +87,15 @@ CREATE TABLE IF NOT EXISTS quiz_history (
     total_count     INTEGER NOT NULL,
     taken_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS chat_history (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id  INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    role         TEXT NOT NULL,        -- 'user' | 'assistant'
+    content      TEXT NOT NULL,
+    sources_json TEXT,                 -- JSON-encoded sources array (nullable)
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 

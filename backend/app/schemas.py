@@ -61,6 +61,7 @@ class DocumentOut(BaseModel):
 
 class QueryRequest(BaseModel):
     subject_id: int
+    document_id: int
     question: str = Field(min_length=1, max_length=2000)
 
 
@@ -73,6 +74,14 @@ class SourceChunk(BaseModel):
 class QueryResponse(BaseModel):
     answer: str
     sources: List[SourceChunk]
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    role: str          # 'user' | 'assistant'
+    content: str
+    sources: Optional[List[SourceChunk]] = None
+    created_at: str
 
 
 # --- Quiz ------------------------------------------------------------------------
