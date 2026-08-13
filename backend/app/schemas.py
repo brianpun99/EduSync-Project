@@ -101,6 +101,7 @@ class QuizQuestion(BaseModel):
     question: str
     options: List[QuizOption]
     correct_option_id: str
+    explanation: str
 
 
 class QuizGenerateResponse(BaseModel):

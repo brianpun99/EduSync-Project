@@ -31,12 +31,14 @@ QUIZ_SYSTEM_PROMPT = (
     "For each question, produce exactly one correct answer and three "
     "plausible but incorrect distractors (not random nonsense -- they "
     "should reflect common misconceptions). "
+    "Crucially, you must also provide a detailed 'explanation' in a brief paragraph "
+    "explaining why the correct answer is right and why the other 3 options are incorrect. "
     "Respond with STRICT JSON ONLY, no prose, no markdown fences, in this "
     "exact shape: "
     '{"questions": [{"question": str, "options": '
     '[{"id": "a", "text": str}, {"id": "b", "text": str}, '
     '{"id": "c", "text": str}, {"id": "d", "text": str}], '
-    '"correct_option_id": str}]}'
+    '"correct_option_id": str, "explanation": str}]}'
 )
 
 
