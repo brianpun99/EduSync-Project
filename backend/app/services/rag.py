@@ -82,7 +82,7 @@ def answer_question(subject_id: int, question: str) -> dict:
     return {"answer": answer_text, "sources": sources}
 
 
-def generate_quiz(subject_id: int, topic: str, num_questions: int) -> dict:
+def generate_quiz(subject_id: int, topic: str, num_questions: int, difficulty: str) -> dict:
     client = _require_client()
     chunks = retrieve_relevant_chunks(subject_id, topic, top_k=8)
     context = _format_context(chunks)
@@ -95,7 +95,7 @@ def generate_quiz(subject_id: int, topic: str, num_questions: int) -> dict:
                 "role": "user",
                 "content": (
                     f"CONTEXT:\n{context}\n\nTOPIC: {topic}\n"
-                    f"Generate exactly {num_questions} questions."
+                    f"Generate exactly {num_questions} questions at a {difficulty} difficulty level."
                 ),
             },
         ],

@@ -90,6 +90,7 @@ class QuizGenerateRequest(BaseModel):
     subject_id: int
     topic: str
     num_questions: int = Field(default=5, ge=1, le=20)
+    difficulty: str = Field(default="Mixed")
 
 
 class QuizOption(BaseModel):

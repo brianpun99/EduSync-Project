@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, ChevronLeft, ChevronRight, FileText, Play, BookOpenCheck, CheckCircle2, XCircle } from "lucide-react";
+import { Clock, ChevronLeft, ChevronRight, FileText, Play, BookOpenCheck, CheckCircle2, XCircle, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -41,7 +41,8 @@ function QuizContent() {
   const initialSubjectId = searchParams.get("subjectId");
   const initialTopic = searchParams.get("documentId") || "General Topic"; // Or some default
 
-  const [view, setView] = useState<"hub" | "generating" | "quiz" | "result">(initialSubjectId ? "generating" : "hub");
+  // We start in config view if navigating directly from a study page, else hub
+  const [view, setView] = useState<"hub" | "config" | "generating" | "quiz" | "result">(initialSubjectId ? "config" : "hub");
   
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -50,6 +51,10 @@ function QuizContent() {
   
   const [subjectId, setSubjectId] = useState<string | null>(initialSubjectId);
   const [topic, setTopic] = useState<string>(initialTopic);
+
+  // Configuration state
+  const [configNumQuestions, setConfigNumQuestions] = useState(5);
+  const [configDifficulty, setConfigDifficulty] = useState("Mixed");
 
   const { data: subjects = [] } = useQuery({
     queryKey: ['subjects'],
@@ -61,7 +66,7 @@ function QuizContent() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: async (params: { subject_id: number; topic: string; num_questions: number }) => {
+    mutationFn: async (params: { subject_id: number; topic: string; num_questions: number; difficulty: string }) => {
       const { data } = await api.post('/quiz/generate', params);
       return data as QuizGenerateResponse;
     },
@@ -100,25 +105,20 @@ function QuizContent() {
     }
   });
 
-  // Automatically start generation if navigated with params
-  useEffect(() => {
-    if (initialSubjectId && view === "generating" && !generateMutation.isPending) {
-      generateMutation.mutate({
-        subject_id: parseInt(initialSubjectId, 10),
-        topic: initialTopic,
-        num_questions: 5
-      });
-    }
-  }, [initialSubjectId, initialTopic, view]);
-
   const handleStartFromHub = (subjId: number, t: string) => {
     setSubjectId(subjId.toString());
     setTopic(t);
+    setView("config");
+  };
+
+  const handleStartGeneration = () => {
+    if (!subjectId) return;
     setView("generating");
     generateMutation.mutate({
-      subject_id: subjId,
-      topic: t,
-      num_questions: 5
+      subject_id: parseInt(subjectId, 10),
+      topic,
+      num_questions: configNumQuestions,
+      difficulty: configDifficulty
     });
   };
 
@@ -150,14 +150,80 @@ function QuizContent() {
                     </div>
                   </div>
                   <Button onClick={() => handleStartFromHub(sub.id, `Review ${sub.name}`)}>
-                    <Play className="w-4 h-4 mr-2" />
-                    Generate
+                    <Settings className="w-4 h-4 mr-2" />
+                    Configure
                   </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (view === "config") {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+              <Settings className="w-5 h-5 text-primary" />
+              Configure Quiz
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-8">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground">Number of Questions</label>
+                <span className="text-sm font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                  {configNumQuestions}
+                </span>
+              </div>
+              <input 
+                type="range" 
+                min="1" 
+                max="20" 
+                value={configNumQuestions} 
+                onChange={(e) => setConfigNumQuestions(parseInt(e.target.value, 10))}
+                className="w-full accent-primary"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground font-medium">
+                <span>1</span>
+                <span>20</span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="text-sm font-medium text-foreground">Difficulty Level</label>
+              <div className="grid grid-cols-2 gap-3">
+                {["Easy", "Intermediate", "Advanced", "Mixed"].map(diff => (
+                  <Button
+                    key={diff}
+                    variant={configDifficulty === diff ? "default" : "outline"}
+                    onClick={() => setConfigDifficulty(diff)}
+                    className={cn(
+                      "w-full transition-all",
+                      configDifficulty === diff ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+                    )}
+                  >
+                    {diff}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-border">
+              <Button variant="outline" className="flex-1" onClick={() => setView("hub")}>
+                Cancel
+              </Button>
+              <Button className="flex-1" onClick={handleStartGeneration}>
+                <Play className="w-4 h-4 mr-2" />
+                Start Quiz
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -185,6 +251,8 @@ function QuizContent() {
               <span>Topic: {quizData?.topic}</span>
               <span className="mx-2">{">"}</span>
               <span>{totalQuestions} Questions</span>
+              <span className="mx-2">{">"}</span>
+              <span>Difficulty: {configDifficulty}</span>
             </div>
           </div>
 
