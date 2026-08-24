@@ -61,6 +61,7 @@ class DocumentOut(BaseModel):
 
 class QueryRequest(BaseModel):
     subject_id: int
+    document_id: int
     question: str = Field(min_length=1, max_length=2000)
 
 
@@ -75,12 +76,21 @@ class QueryResponse(BaseModel):
     sources: List[SourceChunk]
 
 
+class ChatMessageOut(BaseModel):
+    id: int
+    role: str          # 'user' | 'assistant'
+    content: str
+    sources: Optional[List[SourceChunk]] = None
+    created_at: str
+
+
 # --- Quiz ------------------------------------------------------------------------
 
 class QuizGenerateRequest(BaseModel):
     subject_id: int
     topic: str
     num_questions: int = Field(default=5, ge=1, le=20)
+    difficulty: str = Field(default="Mixed")
 
 
 class QuizOption(BaseModel):
@@ -92,6 +102,7 @@ class QuizQuestion(BaseModel):
     question: str
     options: List[QuizOption]
     correct_option_id: str
+    explanation: str
 
 
 class QuizGenerateResponse(BaseModel):
@@ -141,6 +152,10 @@ class QuizHistoryEntry(BaseModel):
 
 
 class AnalyticsOverviewOut(BaseModel):
+    total_subjects: int
+    total_documents: int
+    total_quizzes_taken: int
+    average_quiz_score: float
     quiz_score_trend: List[QuizHistoryEntry]
     strong_count: int
     good_count: int

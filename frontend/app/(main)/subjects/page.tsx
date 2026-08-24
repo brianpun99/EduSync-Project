@@ -6,9 +6,27 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FolderOpen, FileText, Search, Plus, ChevronRight, BookOpen, HardDrive } from "lucide-react";
+import { FolderOpen, FileText, Search, Plus, ChevronRight, BookOpen, HardDrive, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Subject {
   id: number;
@@ -35,6 +53,11 @@ export default function SubjectsPage() {
   const [selectedSubject, setSelectedSubject] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [subjectToDelete, setSubjectToDelete] = useState<Subject | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newSubjectName, setNewSubjectName] = useState("");
 
   const { data: subjects = [], isLoading: isLoadingSubjects } = useQuery<Subject[]>({
     queryKey: ['subjects'],
@@ -79,10 +102,35 @@ export default function SubjectsPage() {
     }
   });
 
+  const deleteSubjectMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/subjects/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      setSelectedSubject(null);
+    },
+  });
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      await api.delete(`/subjects/${selectedSubject}/documents/${docId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents', selectedSubject] });
+      queryClient.invalidateQueries({ queryKey: ['subjects'] });
+    },
+  });
+
   const handleCreateSubject = () => {
-    const name = prompt("Enter subject name:");
-    if (name) {
-      createSubjectMutation.mutate(name);
+    setIsCreateModalOpen(true);
+  };
+
+  const submitCreateSubject = () => {
+    if (newSubjectName.trim()) {
+      createSubjectMutation.mutate(newSubjectName.trim());
+      setIsCreateModalOpen(false);
+      setNewSubjectName("");
     }
   };
 
@@ -124,14 +172,25 @@ export default function SubjectsPage() {
             <h1 className="text-2xl font-bold text-foreground">{currentSubject.name}</h1>
             <p className="text-muted-foreground">{currentSubject.document_count} documents</p>
           </div>
-          <Button 
-            className="bg-primary hover:bg-primary/90"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploadDocumentMutation.isPending}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {uploadDocumentMutation.isPending ? "Uploading..." : "Add Document"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="destructive"
+              className="bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white"
+              onClick={() => setSubjectToDelete(currentSubject)}
+              disabled={deleteSubjectMutation.isPending}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Subject
+            </Button>
+            <Button 
+              className="bg-primary hover:bg-primary/90"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadDocumentMutation.isPending}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {uploadDocumentMutation.isPending ? "Uploading..." : "Add Document"}
+            </Button>
+          </div>
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -195,7 +254,20 @@ export default function SubjectsPage() {
                         <span className="text-xs font-medium capitalize">Status: {doc.status}</span>
                       </div>
                     </div>
-                    {doc.status === 'vectorized' && <ChevronRight className="w-5 h-5 text-muted-foreground" />}
+                    <div className="flex items-center gap-2">
+                      {doc.status === 'vectorized' && <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-400 hover:text-red-500 hover:bg-red-500/10 z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDocumentToDelete(doc);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -204,6 +276,53 @@ export default function SubjectsPage() {
             <p className="text-muted-foreground">No documents uploaded yet.</p>
           )}
         </div>
+        
+        {/* Detail View Modals */}
+        <AlertDialog open={!!subjectToDelete} onOpenChange={(open) => !open && setSubjectToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete the subject "{subjectToDelete?.name}" and all its documents and AI data. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => {
+                  if (subjectToDelete) deleteSubjectMutation.mutate(subjectToDelete.id);
+                  setSubjectToDelete(null);
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={!!documentToDelete} onOpenChange={(open) => !open && setDocumentToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Document</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete "{documentToDelete?.filename}"?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => {
+                  if (documentToDelete) deleteDocumentMutation.mutate(documentToDelete.id);
+                  setDocumentToDelete(null);
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     );
   }
@@ -256,6 +375,19 @@ export default function SubjectsPage() {
                       <span>{subject.document_count} documents</span>
                     </div>
                   </div>
+                  <div className="flex items-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-400 hover:text-red-500 hover:bg-red-500/10 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSubjectToDelete(subject);
+                      }}
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
+                  </div>
                 </div>
                 
                 {/* Progress bar */}
@@ -301,6 +433,53 @@ export default function SubjectsPage() {
           <p className="text-muted-foreground">No subjects found. Create one to get started!</p>
         )}
       </div>
+
+      {/* Grid View Modals */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Subject</DialogTitle>
+            <DialogDescription>
+              Enter a name for your new study subject.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input 
+              placeholder="e.g. Advanced Calculus"
+              value={newSubjectName}
+              onChange={(e) => setNewSubjectName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submitCreateSubject()}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancel</Button>
+            <Button onClick={submitCreateSubject} disabled={!newSubjectName.trim()}>Create Subject</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!subjectToDelete} onOpenChange={(open) => !open && setSubjectToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the subject "{subjectToDelete?.name}" and all its documents and AI data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                if (subjectToDelete) deleteSubjectMutation.mutate(subjectToDelete.id);
+                setSubjectToDelete(null);
+              }}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

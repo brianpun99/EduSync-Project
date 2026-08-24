@@ -2,9 +2,19 @@
 
 import { useState, useEffect, useRef, FormEvent, use } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
@@ -15,9 +25,12 @@ import {
   Sparkles,
   ZoomIn,
   ZoomOut,
-  Minus,
-  Plus,
   Loader2,
+  Trash2,
+  Clock,
+  History,
+  X,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -27,10 +40,17 @@ import "react-pdf/dist/Page/TextLayer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
+interface Source {
+  document: string;
+  snippet: string;
+  score: number;
+}
+
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  sources?: { document: string; snippet: string; score: number }[];
+  sources?: Source[];
+  created_at?: string;
 }
 
 interface PageProps {
@@ -40,21 +60,102 @@ interface PageProps {
   }>;
 }
 
+function formatTimestamp(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString([], { day: "numeric", month: "short" });
+  return `${time} · ${date}`;
+}
+
+function MessageBubble({ message }: { message: ChatMessage }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className={cn("flex gap-3", message.role === "user" ? "flex-row-reverse" : "")}>
+        {/* Avatar */}
+        <div
+          className={cn(
+            "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5",
+            message.role === "user" ? "bg-primary" : "bg-secondary"
+          )}
+        >
+          {message.role === "user" ? (
+            <User className="w-4 h-4 text-primary-foreground" />
+          ) : (
+            <Sparkles className="w-4 h-4 text-primary" />
+          )}
+        </div>
+
+        {/* Bubble */}
+        <div
+          className={cn(
+            "max-w-[85%] rounded-xl px-4 py-3",
+            message.role === "user"
+              ? "bg-primary text-primary-foreground"
+              : "bg-secondary text-foreground"
+          )}
+        >
+          <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+        </div>
+      </div>
+
+      {/* Timestamp */}
+      {message.created_at && (
+        <div
+          className={cn(
+            "flex items-center gap-1 text-xs text-muted-foreground px-2",
+            message.role === "user" ? "justify-end pr-11" : "pl-11"
+          )}
+        >
+          <Clock className="w-3 h-3" />
+          {formatTimestamp(message.created_at)}
+        </div>
+      )}
+
+      {/* Sources (assistant only) */}
+      {message.role === "assistant" &&
+        message.sources &&
+        message.sources.length > 0 && (
+          <div className="ml-11 max-w-[85%] mt-1">
+            <div className="text-xs font-medium text-muted-foreground mb-1.5">Sources</div>
+            <div className="flex flex-wrap gap-1.5">
+              {message.sources.map((source, sIdx) => (
+                <div
+                  key={sIdx}
+                  className="flex items-center gap-1.5 px-2 py-1 bg-card rounded border border-border text-xs"
+                >
+                  <FileText className="w-3 h-3 text-primary flex-shrink-0" />
+                  <span className="text-foreground max-w-[100px] truncate">{source.document}</span>
+                  <span className="text-green-400 font-medium">{Math.round(source.score * 100)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+    </div>
+  );
+}
+
 export default function StudyWorkspacePage({ params }: PageProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { subjectId, documentId } = use(params);
 
+  // ── Chat state (starts blank every visit) ───────────────────────────────────
   const [inputMessage, setInputMessage] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  // PDF viewer state
+  // ── PDF viewer state ────────────────────────────────────────────────────────
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.0);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch document metadata (to get filename)
+  // ── Fetch document metadata ─────────────────────────────────────────────────
   const { data: docMeta } = useQuery({
     queryKey: ["document", subjectId, documentId],
     queryFn: async () => {
@@ -63,56 +164,73 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     },
   });
 
-  // Build the document URL with auth token
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [fileType, setFileType] = useState<string | null>(null);
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) return;
+  // ── Fetch persisted history (kept separate — not auto-loaded into chat) ─────
+  const { data: chatHistory = [], isLoading: isHistoryLoading, refetch: refetchHistory } = useQuery<ChatMessage[]>({
+    queryKey: ["chat_history", subjectId, documentId],
+    queryFn: async () => {
+      const { data } = await api.get(
+        `/subjects/${subjectId}/documents/${documentId}/chat`
+      );
+      return data as ChatMessage[];
+    },
+    // Only fetch when the history panel is opened
+    enabled: showHistoryPanel,
+  });
 
-    // Fetch the file as a blob so we can pass the auth header
+  // ── Scroll to bottom when new messages arrive ───────────────────────────────
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
+  // ── Build blob URL for PDF (auth header required) ───────────────────────────
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let objectUrl: string | null = null;
     api
       .get(`/subjects/${subjectId}/documents/${documentId}/file`, {
         responseType: "blob",
       })
       .then((res) => {
         const contentType = res.headers["content-type"] || "application/octet-stream";
-        setFileType(contentType);
         const blob = new Blob([res.data], { type: contentType });
-        setPdfUrl(URL.createObjectURL(blob));
+        objectUrl = URL.createObjectURL(blob);
+        setPdfUrl(objectUrl);
       })
-      .catch(() => {
-        setPdfError("Could not load document file.");
-      });
+      .catch(() => setPdfError("Could not load document file."));
 
     return () => {
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [subjectId, documentId]);
-
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
     setCurrentPage(1);
   };
 
+  // ── Send message ─────────────────────────────────────────────────────────────
   const queryMutation = useMutation({
     mutationFn: async (question: string) => {
       const { data } = await api.post("/query", {
         subject_id: parseInt(subjectId, 10),
+        document_id: parseInt(documentId, 10),
         question,
       });
       return data;
     },
     onSuccess: (data) => {
+      const now = new Date().toISOString();
       setChatMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content: data.answer,
           sources: data.sources,
+          created_at: now,
         },
       ]);
+      // Invalidate history cache so it refreshes next time panel opens
+      queryClient.invalidateQueries({ queryKey: ["chat_history", subjectId, documentId] });
     },
     onError: (error: any) => {
       setChatMessages((prev) => [
@@ -131,22 +249,40 @@ export default function StudyWorkspacePage({ params }: PageProps) {
 
     const currentMsg = inputMessage;
     setInputMessage("");
+    const now = new Date().toISOString();
 
     setChatMessages((prev) => [
       ...prev,
-      { role: "user", content: currentMsg },
+      { role: "user", content: currentMsg, created_at: now },
     ]);
 
     queryMutation.mutate(currentMsg);
   };
 
+  // ── Clear all history ────────────────────────────────────────────────────────
+  const clearHistoryMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/subjects/${subjectId}/documents/${documentId}/chat`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["chat_history", subjectId, documentId] });
+      setShowClearDialog(false);
+      setShowHistoryPanel(false);
+    },
+  });
+
   const handleGenerateQuiz = () => {
     router.push(`/quiz?subjectId=${subjectId}&documentId=${documentId}`);
   };
 
+  const handleOpenHistory = () => {
+    setShowHistoryPanel(true);
+    refetchHistory();
+  };
+
   return (
     <div className="flex-1 flex h-screen overflow-hidden">
-      {/* Left Pane - Document Viewer */}
+      {/* ── Left Pane – PDF Viewer ─────────────────────────────────────────── */}
       <div className="w-[60%] flex flex-col border-r border-border bg-secondary/10">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card">
@@ -161,98 +297,63 @@ export default function StudyWorkspacePage({ params }: PageProps) {
             </span>
           </div>
 
-          {/* PDF Controls */}
           {numPages > 0 && (
             <div className="flex items-center gap-1">
-              {/* Zoom */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setScale((s) => Math.max(0.5, s - 0.15))}
-              >
+              <Button variant="ghost" size="icon" className="h-8 w-8"
+                onClick={() => setScale((s) => Math.max(0.5, s - 0.15))}>
                 <ZoomOut className="w-4 h-4" />
               </Button>
               <span className="text-xs text-muted-foreground w-12 text-center">
                 {Math.round(scale * 100)}%
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setScale((s) => Math.min(3, s + 0.15))}
-              >
+              <Button variant="ghost" size="icon" className="h-8 w-8"
+                onClick={() => setScale((s) => Math.min(3, s + 0.15))}>
                 <ZoomIn className="w-4 h-4" />
               </Button>
             </div>
           )}
         </div>
 
-        {/* Page Navigation */}
+        {/* Page navigation */}
         {numPages > 0 && (
           <div className="flex items-center justify-center gap-3 px-4 py-2 border-b border-border bg-card/50">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage((p) => p - 1)}
-            >
+            <Button variant="outline" size="sm" disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => p - 1)}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
             <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={1}
-                max={numPages}
-                value={currentPage}
+              <Input type="number" min={1} max={numPages} value={currentPage}
                 onChange={(e) => {
                   const val = parseInt(e.target.value, 10);
-                  if (!isNaN(val) && val >= 1 && val <= numPages) {
-                    setCurrentPage(val);
-                  }
+                  if (!isNaN(val) && val >= 1 && val <= numPages) setCurrentPage(val);
                 }}
                 className="w-16 h-8 text-center bg-secondary border-border text-sm"
               />
-              <span className="text-sm text-muted-foreground">
-                of {numPages}
-              </span>
+              <span className="text-sm text-muted-foreground">of {numPages}</span>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage >= numPages}
-              onClick={() => setCurrentPage((p) => p + 1)}
-            >
+            <Button variant="outline" size="sm" disabled={currentPage >= numPages}
+              onClick={() => setCurrentPage((p) => p + 1)}>
               <ChevronRightIcon className="w-4 h-4" />
             </Button>
           </div>
         )}
 
-        {/* Document Content */}
-        <div
-          ref={containerRef}
-          className="flex-1 overflow-auto flex justify-center bg-secondary/30"
-        >
+        {/* Document content */}
+        <div ref={containerRef} className="flex-1 overflow-auto flex justify-center bg-secondary/30">
           {pdfError && (
-            <div className="flex items-center justify-center h-full text-red-400">
-              {pdfError}
-            </div>
+            <div className="flex items-center justify-center h-full text-red-400">{pdfError}</div>
           )}
-
           {!pdfUrl && !pdfError && (
             <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" />
               Loading document...
             </div>
           )}
-
           {pdfUrl && (
             <Document
               file={pdfUrl}
               onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={(err) =>
-                setPdfError(`Failed to load PDF: ${err.message}`)
-              }
+              onLoadError={(err) => setPdfError(`Failed to load PDF: ${err.message}`)}
               loading={
                 <div className="flex items-center justify-center h-full gap-2 text-muted-foreground py-20">
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -260,10 +361,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                 </div>
               }
             >
-              <Page
-                pageNumber={currentPage}
-                scale={scale}
-                className="shadow-lg my-4"
+              <Page pageNumber={currentPage} scale={scale} className="shadow-lg my-4"
                 loading={
                   <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -273,97 +371,53 @@ export default function StudyWorkspacePage({ params }: PageProps) {
               />
             </Document>
           )}
-
         </div>
       </div>
 
-      {/* Right Pane - RAG AI Chat */}
-      <div className="w-[40%] flex flex-col bg-card">
+      {/* ── Right Pane – AI Chat ───────────────────────────────────────────── */}
+      <div className="w-[40%] flex flex-col bg-card relative">
+        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
               <Bot className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold text-foreground">
-                AI Study Assistant
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Ask questions about this subject
-              </p>
+              <h3 className="font-semibold text-foreground">AI Study Assistant</h3>
+              <p className="text-xs text-muted-foreground">Ask questions about this document</p>
             </div>
           </div>
+
+          {/* History button — top right corner */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1.5 text-sm border-border hover:border-primary/50 hover:text-primary transition-colors"
+            onClick={handleOpenHistory}
+          >
+            <History className="w-4 h-4" />
+            History
+          </Button>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-6">
-          {chatMessages.length === 0 && (
-            <div className="text-center text-muted-foreground mt-10">
-              <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>Ask a question based on your uploaded documents.</p>
+        {/* Messages (current session only — starts blank) */}
+        <div className="flex-1 overflow-auto p-4 space-y-5">
+          {chatMessages.length === 0 && !queryMutation.isPending && (
+            <div className="text-center text-muted-foreground mt-10 space-y-3">
+              <Sparkles className="w-8 h-8 mx-auto opacity-50" />
+              <p className="text-sm">Ask a question based on your uploaded documents.</p>
+              <button
+                onClick={handleOpenHistory}
+                className="inline-flex items-center gap-1.5 text-xs text-primary/70 hover:text-primary transition-colors underline-offset-2 hover:underline"
+              >
+                <History className="w-3 h-3" />
+                View previous conversations
+              </button>
             </div>
           )}
 
           {chatMessages.map((message, idx) => (
-            <div key={idx} className={cn("flex flex-col gap-2")}>
-              <div
-                className={cn(
-                  "flex gap-3",
-                  message.role === "user" ? "flex-row-reverse" : ""
-                )}
-              >
-                <div
-                  className={cn(
-                    "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                    message.role === "user" ? "bg-primary" : "bg-secondary"
-                  )}
-                >
-                  {message.role === "user" ? (
-                    <User className="w-4 h-4 text-primary-foreground" />
-                  ) : (
-                    <Sparkles className="w-4 h-4 text-primary" />
-                  )}
-                </div>
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-xl px-4 py-3",
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-foreground"
-                  )}
-                >
-                  <div className="text-sm whitespace-pre-wrap">
-                    {message.content}
-                  </div>
-                </div>
-              </div>
-
-              {/* Show sources if assistant */}
-              {message.role === "assistant" &&
-                message.sources &&
-                message.sources.length > 0 && (
-                  <div className="ml-11 max-w-[85%] mt-1">
-                    <div className="text-xs font-medium text-muted-foreground mb-1">
-                      Sources
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {message.sources.map((source, sIdx) => (
-                        <div
-                          key={sIdx}
-                          className="flex items-center gap-1.5 px-2 py-1 bg-card rounded border border-border text-xs"
-                        >
-                          <FileText className="w-3 h-3 text-primary" />
-                          <span className="text-foreground max-w-[100px] truncate">
-                            {source.document}
-                          </span>
-                          <span className="text-green-400">
-                            {Math.round(source.score * 100)}%
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-            </div>
+            <MessageBubble key={idx} message={message} />
           ))}
 
           {queryMutation.isPending && (
@@ -371,23 +425,26 @@ export default function StudyWorkspacePage({ params }: PageProps) {
               <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-secondary">
                 <Sparkles className="w-4 h-4 text-primary animate-pulse" />
               </div>
-              <div className="bg-secondary text-foreground max-w-[85%] rounded-xl px-4 py-3 text-sm">
+              <div className="bg-secondary text-foreground max-w-[85%] rounded-xl px-4 py-3 text-sm flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
                 Thinking...
               </div>
             </div>
           )}
+
+          <div ref={chatBottomRef} />
         </div>
 
+        {/* Quiz button */}
         <div className="px-4 py-3 border-t border-border">
-          <Button
-            onClick={handleGenerateQuiz}
-            className="w-full bg-primary hover:bg-primary/90 h-12 text-base font-semibold"
-          >
+          <Button onClick={handleGenerateQuiz}
+            className="w-full bg-primary hover:bg-primary/90 h-12 text-base font-semibold">
             <Sparkles className="w-5 h-5 mr-2" />
             Generate Adaptive Quiz
           </Button>
         </div>
 
+        {/* Input */}
         <form onSubmit={handleSendMessage} className="p-4 border-t border-border">
           <div className="flex gap-2">
             <Input
@@ -397,17 +454,113 @@ export default function StudyWorkspacePage({ params }: PageProps) {
               className="bg-secondary border-border"
               disabled={queryMutation.isPending}
             />
-            <Button
-              type="submit"
-              size="icon"
-              className="bg-primary hover:bg-primary/90"
-              disabled={queryMutation.isPending}
-            >
+            <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90"
+              disabled={queryMutation.isPending || !inputMessage.trim()}>
               <Send className="w-4 h-4" />
             </Button>
           </div>
         </form>
+
+        {/* ── History Slide-over Panel ─────────────────────────────────────── */}
+        {showHistoryPanel && (
+          <>
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/40 z-10"
+              onClick={() => setShowHistoryPanel(false)}
+            />
+
+            {/* Panel */}
+            <div className="absolute inset-0 z-20 flex flex-col bg-card animate-in slide-in-from-right duration-200">
+              {/* Panel Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/95">
+                <div className="flex items-center gap-2">
+                  <History className="w-5 h-5 text-primary" />
+                  <div>
+                    <h3 className="font-semibold text-foreground">Chat History</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {chatHistory.length > 0
+                        ? `${chatHistory.length} messages saved`
+                        : "No past conversations"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {chatHistory.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-400 hover:text-red-500 hover:bg-red-500/10"
+                      onClick={() => setShowClearDialog(true)}
+                      title="Clear all history"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon" onClick={() => setShowHistoryPanel(false)}>
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* History messages */}
+              <div className="flex-1 overflow-auto p-4 space-y-5">
+                {isHistoryLoading ? (
+                  <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Loading history...
+                  </div>
+                ) : chatHistory.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                    <MessageSquare className="w-10 h-10 opacity-30" />
+                    <p className="text-sm">No previous conversations yet.</p>
+                    <p className="text-xs opacity-70">
+                      Your Q&amp;A sessions will appear here after your first chat.
+                    </p>
+                  </div>
+                ) : (
+                  chatHistory.map((message, idx) => (
+                    <MessageBubble key={idx} message={message} />
+                  ))
+                )}
+              </div>
+
+              {/* Panel Footer */}
+              <div className="px-4 py-3 border-t border-border bg-card/95">
+                <Button
+                  className="w-full bg-primary hover:bg-primary/90"
+                  onClick={() => setShowHistoryPanel(false)}
+                >
+                  Back to Chat
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
+
+      {/* ── Clear History Confirmation Dialog ──────────────────────────────── */}
+      <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Chat History?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all{" "}
+              <span className="text-foreground font-medium">{chatHistory.length} messages</span>{" "}
+              saved for this document. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => clearHistoryMutation.mutate()}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              {clearHistoryMutation.isPending ? "Clearing..." : "Clear History"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

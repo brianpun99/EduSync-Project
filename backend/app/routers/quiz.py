@@ -44,7 +44,12 @@ def _get_or_create_topic(db: sqlite3.Connection, subject_id: int, topic_name: st
 @router.post("/generate", response_model=QuizGenerateResponse)
 def create_quiz(payload: QuizGenerateRequest, _user_id: int = Depends(require_auth)):
     try:
-        raw = generate_quiz(payload.subject_id, payload.topic, payload.num_questions)
+        raw = generate_quiz(
+            payload.subject_id,
+            payload.topic,
+            payload.num_questions,
+            payload.difficulty,
+        )
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc))
     except ValueError as exc:
