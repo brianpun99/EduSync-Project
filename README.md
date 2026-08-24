@@ -213,7 +213,7 @@ Create a `.env` file inside the `backend/` directory (use `.env.example` as a te
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `GROQ_API_KEY` | ✅ Yes | — | API key for Groq cloud inference (RAG chat & quiz generation) |
-| `GROQ_MODEL` | No | `llama-3.1-8b-instant` | Override the default model served by Groq (currently set to `openai/gpt-oss-120b`) |
+| `GROQ_MODEL` | No | `GPT--oss--120B` | Override the default model served by Groq (currently set to `openai/gpt-oss-120b`) |
 | `EDUSYNC_JWT_SECRET` | No | `change-me-in-production` | Secret used to sign local session tokens. Set to a random string in production |
 | `EDUSYNC_PORT` | No | `8000` | Local port the API listens on (bound to `127.0.0.1` only) |
 
