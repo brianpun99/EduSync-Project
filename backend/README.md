@@ -2,7 +2,7 @@
 
 FastAPI backend implementing the Hybrid Edge RAG architecture described in
 the FYP report: local ingestion/retrieval (PyMuPDF + LangChain + ChromaDB),
-cloud inference (Groq/Llama-3), and a SQLite-backed EWMA mastery engine.
+cloud inference (Groq/OpenAI), and a SQLite-backed EWMA mastery engine.
 
 ## Setup
 
@@ -25,7 +25,7 @@ server is running.
 | Variable | Purpose |
 |---|---|
 | `GROQ_API_KEY` | Required for `/api/query` and `/api/quiz/generate` |
-| `GROQ_MODEL` | Defaults to `llama-3.1-8b-instant` |
+| `GROQ_MODEL` | Defaults to `openai/gpt-oss-120b` |
 | `EDUSYNC_JWT_SECRET` | Signs local session tokens — set to a random string |
 | `EDUSYNC_PORT` | Defaults to `8000` |
 
