@@ -12,6 +12,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -321,11 +326,17 @@ export default function StudyWorkspacePage({ params }: PageProps) {
   };
 
   return (
-    <div className="flex-1 flex h-screen overflow-hidden">
-      {/* ── Left Pane – PDF Viewer ─────────────────────────────────────────── */}
-      <div className="w-[60%] flex flex-col border-r border-border bg-secondary/10">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card">
+    <div className="flex-1 flex h-full max-h-screen overflow-hidden">
+      <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+        {/* ── Left Pane – PDF Viewer ─────────────────────────────────────────── */}
+        <ResizablePanel
+          defaultSize={60}
+          minSize={30}
+          maxSize={80}
+          className="flex flex-col border-r border-border bg-secondary/10 min-h-0 h-full overflow-hidden"
+        >
+          {/* Toolbar */}
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-border bg-card">
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
             <ChevronLeft className="w-4 h-4 mr-1" />
             Back
@@ -356,7 +367,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
 
         {/* Page navigation */}
         {numPages > 0 && (
-          <div className="flex items-center justify-center gap-3 px-4 py-2 border-b border-border bg-card/50">
+          <div className="flex-shrink-0 flex items-center justify-center gap-3 px-4 py-2 border-b border-border bg-card/50">
             <Button variant="outline" size="sm" disabled={currentPage <= 1}
               onClick={() => setCurrentPage((p) => p - 1)}>
               <ChevronLeft className="w-4 h-4" />
@@ -379,7 +390,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
         )}
 
         {/* Document content */}
-        <div ref={containerRef} className="flex-1 overflow-auto flex justify-center bg-secondary/30">
+        <div ref={containerRef} className="flex-1 min-h-0 overflow-auto flex justify-center bg-secondary/30">
           {pdfError && (
             <div className="flex items-center justify-center h-full text-red-400">{pdfError}</div>
           )}
@@ -412,12 +423,20 @@ export default function StudyWorkspacePage({ params }: PageProps) {
             </Document>
           )}
         </div>
-      </div>
+      </ResizablePanel>
+
+      {/* ── Resizable Splitter Handle ────────────────────────────────────────── */}
+      <ResizableHandle withHandle />
 
       {/* ── Right Pane – AI Chat ───────────────────────────────────────────── */}
-      <div className="w-[40%] flex flex-col bg-card relative">
+      <ResizablePanel
+        defaultSize={40}
+        minSize={25}
+        maxSize={70}
+        className="flex flex-col bg-card relative min-h-0 h-full overflow-hidden"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-border bg-card">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
               <Bot className="w-5 h-5 text-primary" />
@@ -442,7 +461,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
 
         {/* ── Document Scope Checklist ──────────────────────────────────────── */}
         {siblingDocs.length > 1 && (
-          <Collapsible open={scopeOpen} onOpenChange={setScopeOpen}>
+          <Collapsible open={scopeOpen} onOpenChange={setScopeOpen} className="flex-shrink-0">
             <CollapsibleTrigger asChild>
               <button className="w-full flex items-center justify-between px-4 py-2 border-b border-border bg-secondary/30 hover:bg-secondary/50 transition-colors text-xs">
                 <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -499,7 +518,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
         )}
 
         {/* Messages (current session only — starts blank) */}
-        <div className="flex-1 overflow-auto p-4 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5 overscroll-contain">
           {chatMessages.length === 0 && !queryMutation.isPending && (
             <div className="text-center text-muted-foreground mt-10 space-y-3">
               <Sparkles className="w-8 h-8 mx-auto opacity-50" />
@@ -534,7 +553,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
         </div>
 
         {/* Quiz button */}
-        <div className="px-4 py-3 border-t border-border">
+        <div className="flex-shrink-0 px-4 py-3 border-t border-border bg-card">
           <Button onClick={handleGenerateQuiz}
             className="w-full bg-primary hover:bg-primary/90 h-12 text-base font-semibold">
             <Sparkles className="w-5 h-5 mr-2" />
@@ -543,7 +562,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
         </div>
 
         {/* Input */}
-        <form onSubmit={handleSendMessage} className="p-4 border-t border-border">
+        <form onSubmit={handleSendMessage} className="flex-shrink-0 p-4 border-t border-border bg-card">
           <div className="flex gap-2">
             <Input
               value={inputMessage}
@@ -602,7 +621,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
               </div>
 
               {/* History messages */}
-              <div className="flex-1 overflow-auto p-4 space-y-5">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5 overscroll-contain">
                 {isHistoryLoading ? (
                   <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -624,7 +643,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
               </div>
 
               {/* Panel Footer */}
-              <div className="px-4 py-3 border-t border-border bg-card/95">
+              <div className="flex-shrink-0 px-4 py-3 border-t border-border bg-card/95">
                 <Button
                   className="w-full bg-primary hover:bg-primary/90"
                   onClick={() => setShowHistoryPanel(false)}
@@ -635,7 +654,8 @@ export default function StudyWorkspacePage({ params }: PageProps) {
             </div>
           </>
         )}
-      </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
 
       {/* ── Clear History Confirmation Dialog ──────────────────────────────── */}
       <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
