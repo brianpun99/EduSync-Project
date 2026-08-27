@@ -317,7 +317,11 @@ export default function StudyWorkspacePage({ params }: PageProps) {
 
   const handleGenerateQuiz = () => {
     const docIdsParam = Array.from(selectedDocIds).join(",");
-    router.push(`/quiz?subjectId=${subjectId}&documentId=${documentId}&documentIds=${docIdsParam}`);
+    const rawName = docMeta?.filename || `Document ${documentId}`;
+    const cleanTopic = rawName.replace(/\.[^/.]+$/, "").replace(/_/g, " ").trim();
+    router.push(
+      `/quiz?subjectId=${subjectId}&documentId=${documentId}&topic=${encodeURIComponent(cleanTopic)}&documentIds=${docIdsParam}`
+    );
   };
 
   const handleOpenHistory = () => {

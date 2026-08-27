@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Clock, ChevronLeft, ChevronRight, FileText, Play, BookOpenCheck, CheckCircle2, XCircle, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -39,7 +40,10 @@ function QuizContent() {
   const router = useRouter();
   
   const initialSubjectId = searchParams.get("subjectId");
-  const initialTopic = searchParams.get("documentId") || "General Topic"; // Or some default
+  const rawTopicParam = searchParams.get("topic");
+  const initialTopic = rawTopicParam
+    ? decodeURIComponent(rawTopicParam).replace(/\.[^/.]+$/, "").replace(/_/g, " ").trim()
+    : "General Topic";
   const initialDocumentIds = searchParams.get("documentIds");
 
   // Parse comma-separated document IDs from the study workspace checklist
@@ -179,7 +183,18 @@ function QuizContent() {
               Configure Quiz
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-8">
+          <CardContent className="space-y-6">
+            {/* Topic Name */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Topic / Slide Focus</label>
+              <Input
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g. Deadlock, Process Management"
+                className="bg-secondary border-border font-medium"
+              />
+            </div>
+
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-foreground">Number of Questions</label>

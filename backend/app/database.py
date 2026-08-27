@@ -99,10 +99,31 @@ CREATE TABLE IF NOT EXISTS chat_history (
 """
 
 
+def _clean_legacy_topic_names(conn: sqlite3.Connection) -> None:
+    """Resolve legacy numeric topic names (e.g. '6', '8') back to document filenames."""
+    try:
+        rows = conn.execute("SELECT id, subject_id, name FROM topics").fetchall()
+        for row in rows:
+            name_str = str(row["name"]).strip()
+            if name_str.isdigit():
+                doc_id = int(name_str)
+                doc = conn.execute("SELECT filename FROM documents WHERE id = ?", (doc_id,)).fetchone()
+                if doc:
+                    raw_name = doc["filename"]
+                    clean_name = raw_name.rsplit(".", 1)[0].replace("_", " ").strip()
+                    try:
+                        conn.execute("UPDATE topics SET name = ? WHERE id = ?", (clean_name, row["id"]))
+                    except sqlite3.IntegrityError:
+                        pass
+    except Exception:
+        pass
+
+
 def init_db() -> None:
     conn = _connect()
     try:
         conn.executescript(SCHEMA)
+        _clean_legacy_topic_names(conn)
         conn.commit()
     finally:
         conn.close()

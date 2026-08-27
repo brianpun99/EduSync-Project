@@ -4,8 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Target, FileText, AlertTriangle, Clock, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
+import { Search, Target, FileText, AlertTriangle, Clock, ChevronRight, TrendingUp, TrendingDown, CheckCircle2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
 interface WeakTopic {
@@ -93,18 +95,22 @@ export default function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-lg font-semibold text-foreground">Top Weak Topics</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {dashboard?.weak_topics && dashboard.weak_topics.length > 0 ? (
               dashboard.weak_topics.map((topic, idx) => (
-                <TopicProgress 
+                <WeakTopicCard 
                   key={idx} 
-                  name={`${topic.topic} (${topic.subject})`} 
-                  progress={Math.round(topic.mastery_score)} 
-                  color="bg-red-500" 
+                  topic={topic.topic}
+                  subject={topic.subject}
+                  masteryScore={topic.mastery_score}
                 />
               ))
             ) : (
-              <p className="text-muted-foreground text-sm">No weak topics right now! Great job.</p>
+              <div className="text-center py-8 text-muted-foreground space-y-2">
+                <CheckCircle2 className="w-8 h-8 mx-auto text-green-400 opacity-80" />
+                <p className="text-sm font-medium text-foreground">No Knowledge Gaps Detected</p>
+                <p className="text-xs">All studied topics are at or above the 60% mastery threshold.</p>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -177,16 +183,74 @@ function StatCard({
   )
 }
 
-function TopicProgress({ name, progress, color }: { name: string; progress: number; color: string }) {
+function getMasteryBadge(score: number) {
+  if (score < 40) {
+    return {
+      label: "Needs Practice",
+      className: "bg-red-500/10 text-red-400 border-red-500/20",
+      barColor: "bg-red-500",
+    };
+  }
+  if (score < 60) {
+    return {
+      label: "Developing",
+      className: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+      barColor: "bg-amber-500",
+    };
+  }
+  if (score < 80) {
+    return {
+      label: "Competent",
+      className: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+      barColor: "bg-blue-500",
+    };
+  }
+  return {
+    label: "Mastered",
+    className: "bg-green-500/10 text-green-400 border-green-500/20",
+    barColor: "bg-green-500",
+  };
+}
+
+function WeakTopicCard({
+  topic,
+  subject,
+  masteryScore,
+}: {
+  topic: string;
+  subject: string;
+  masteryScore: number;
+}) {
+  const meta = getMasteryBadge(masteryScore);
+  const rounded = Math.round(masteryScore);
+
   return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-sm">
-        <span className="text-foreground">{name}</span>
-        <span className="text-muted-foreground">{progress}%</span>
+    <div className="p-3.5 rounded-xl bg-secondary/20 border border-border hover:border-primary/40 transition-all space-y-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1 min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-foreground text-sm truncate">
+              {topic}
+            </span>
+            <Badge variant="outline" className="text-[11px] py-0 px-2 font-normal bg-secondary/50 text-muted-foreground border-border">
+              {subject}
+            </Badge>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-sm font-bold text-foreground">{rounded}%</span>
+          <Badge className={cn("text-[10px] px-1.5 py-0.5 border font-medium", meta.className)}>
+            {meta.label}
+          </Badge>
+        </div>
       </div>
-      <div className="h-2 bg-secondary rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${progress}%` }} />
+
+      <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+        <div
+          className={cn("h-full rounded-full transition-all duration-500", meta.barColor)}
+          style={{ width: `${Math.max(5, rounded)}%` }}
+        />
       </div>
     </div>
-  )
+  );
 }
