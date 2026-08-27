@@ -220,6 +220,25 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     enabled: showHistoryPanel,
   });
 
+  // ── Active Study Time Logger (Heartbeat every 30s) ──────────────────────────
+  useEffect(() => {
+    const sId = parseInt(subjectId, 10);
+    const dId = parseInt(documentId, 10);
+    if (isNaN(sId) || isNaN(dId)) return;
+
+    const interval = setInterval(() => {
+      api.post("/analytics/study-time", {
+        duration_seconds: 30,
+        subject_id: sId,
+        document_id: dId,
+      }).catch(() => {});
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [subjectId, documentId]);
+
   // ── Scroll to bottom when new messages arrive ───────────────────────────────
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });

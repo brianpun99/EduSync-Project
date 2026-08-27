@@ -96,6 +96,14 @@ CREATE TABLE IF NOT EXISTS chat_history (
     sources_json TEXT,                 -- JSON-encoded sources array (nullable)
     created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS study_sessions (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id       INTEGER REFERENCES subjects(id) ON DELETE CASCADE,
+    document_id      INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 

@@ -142,10 +142,28 @@ class WeakTopic(BaseModel):
     mastery_score: float
 
 
+class ActivityItem(BaseModel):
+    id: str
+    type: str  # "quiz" | "document" | "chat"
+    title: str
+    description: str
+    timestamp: str
+    meta: Optional[str] = None
+
+
+class StudyTimeLogRequest(BaseModel):
+    duration_seconds: int = Field(..., ge=1, le=3600)
+    subject_id: Optional[int] = None
+    document_id: Optional[int] = None
+
+
 class DashboardOut(BaseModel):
     overall_mastery: float
     weak_topics: List[WeakTopic]
     document_count: int
+    study_time_minutes: int
+    study_time_formatted: str
+    recent_activities: List[ActivityItem]
 
 
 class QuizHistoryEntry(BaseModel):
