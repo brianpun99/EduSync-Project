@@ -43,6 +43,7 @@ def _get_or_create_topic(db: sqlite3.Connection, subject_id: int, topic_name: st
 
 @router.post("/generate", response_model=QuizGenerateResponse)
 def create_quiz(payload: QuizGenerateRequest, _user_id: int = Depends(require_auth)):
+    print(f"[QUIZ GENERATE REQUEST] subject_id={payload.subject_id}, document_ids={payload.document_ids}, num_questions={payload.num_questions}, topic='{payload.topic}'")
     try:
         raw = generate_quiz(
             payload.subject_id,

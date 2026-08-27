@@ -302,10 +302,19 @@ function QuizContent() {
                         const isChecked = selectedDocIds.includes(doc.id);
                         const cleanTitle = cleanDocName(doc.filename);
                         return (
-                          <label
+                          <div
                             key={doc.id}
+                            onClick={() => {
+                              if (isChecked) {
+                                if (selectedDocIds.length > 1) {
+                                  setSelectedDocIds(selectedDocIds.filter((id) => id !== doc.id));
+                                }
+                              } else {
+                                setSelectedDocIds([...selectedDocIds, doc.id]);
+                              }
+                            }}
                             className={cn(
-                              "flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors text-xs",
+                              "flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors text-xs select-none",
                               isChecked
                                 ? "bg-primary/10 border border-primary/20 text-foreground"
                                 : "hover:bg-secondary/60 text-muted-foreground"
@@ -313,20 +322,11 @@ function QuizContent() {
                           >
                             <Checkbox
                               checked={isChecked}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedDocIds((prev) => [...prev, doc.id]);
-                                } else {
-                                  if (selectedDocIds.length > 1) {
-                                    setSelectedDocIds((prev) => prev.filter((id) => id !== doc.id));
-                                  }
-                                }
-                              }}
-                              className="h-4 w-4"
+                              className="h-4 w-4 pointer-events-none"
                             />
                             <FileText className="w-3.5 h-3.5 flex-shrink-0 text-primary/70" />
                             <span className="truncate font-medium flex-1">{cleanTitle}</span>
-                          </label>
+                          </div>
                         );
                       })
                     )}

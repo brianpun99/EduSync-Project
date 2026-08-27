@@ -489,12 +489,17 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                   Select which documents the AI should reference:
                 </p>
                 {siblingDocs.map((doc) => (
-                  <label
+                  <div
                     key={doc.id}
+                    onClick={() => {
+                      if (doc.id !== currentDocId) {
+                        toggleDocId(doc.id);
+                      }
+                    }}
                     className={cn(
-                      "flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors text-xs",
+                      "flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors text-xs select-none",
                       doc.id === currentDocId
-                        ? "bg-primary/10 border border-primary/20"
+                        ? "bg-primary/10 border border-primary/20 cursor-default"
                         : "hover:bg-secondary/60",
                       selectedDocIds.has(doc.id)
                         ? "text-foreground"
@@ -503,9 +508,8 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                   >
                     <Checkbox
                       checked={selectedDocIds.has(doc.id)}
-                      onCheckedChange={() => toggleDocId(doc.id)}
                       disabled={doc.id === currentDocId}
-                      className="h-3.5 w-3.5"
+                      className="h-3.5 w-3.5 pointer-events-none"
                     />
                     <FileText className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate">{doc.filename}</span>
@@ -514,7 +518,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                         current
                       </span>
                     )}
-                  </label>
+                  </div>
                 ))}
               </div>
             </CollapsibleContent>
