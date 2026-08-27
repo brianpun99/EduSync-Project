@@ -36,7 +36,12 @@ def query(
     if doc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found.")
 
-    result = answer_question(payload.subject_id, payload.question)
+    try:
+        result = answer_question(payload.subject_id, payload.question)
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc))
+    except Exception as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"AI Inference Error: {exc}")
 
     # Persist user message
     db.execute(

@@ -54,6 +54,8 @@ def create_quiz(payload: QuizGenerateRequest, _user_id: int = Depends(require_au
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc))
     except ValueError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+    except Exception as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Quiz Generation Error: {exc}")
 
     return QuizGenerateResponse(topic=payload.topic, questions=raw.get("questions", []))
 
