@@ -36,18 +36,14 @@ def query(
     if doc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found.")
 
-<<<<<<< HEAD
     # Default to current document if no checklist selection provided
     doc_ids = payload.document_ids if payload.document_ids else [payload.document_id]
-    result = answer_question(payload.subject_id, payload.question, document_ids=doc_ids)
-=======
     try:
-        result = answer_question(payload.subject_id, payload.question)
+        result = answer_question(payload.subject_id, payload.question, document_ids=doc_ids)
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc))
     except Exception as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"AI Inference Error: {exc}")
->>>>>>> main
 
     # Persist user message
     db.execute(

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List
 
 import chromadb
-import fitz  # PyMuPDF
+import pymupdf as fitz
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.config import CHROMA_DIR, CHUNK_OVERLAP, CHUNK_SIZE, RETRIEVAL_TOP_K

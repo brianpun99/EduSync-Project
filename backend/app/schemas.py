@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -102,6 +103,7 @@ class QuizOption(BaseModel):
 
 class QuizQuestion(BaseModel):
     question: str
+    source_document: Optional[str] = None
     options: List[QuizOption]
     correct_option_id: str
     explanation: str

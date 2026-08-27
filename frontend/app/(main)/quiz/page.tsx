@@ -23,6 +23,7 @@ interface QuizOption {
 
 interface QuizQuestion {
   question: string;
+  source_document?: string;
   options: QuizOption[];
   correct_option_id: string;
   explanation?: string;
@@ -434,6 +435,14 @@ function QuizContent() {
             {question && (
               <Card className="max-w-2xl w-full bg-card border-border">
                 <CardHeader>
+                  {question.source_document && (
+                    <div className="mb-2">
+                      <Badge variant="outline" className="text-xs font-normal py-0.5 px-2.5 bg-primary/10 border-primary/30 text-primary">
+                        <FileText className="w-3 h-3 mr-1.5 inline-block" />
+                        {question.source_document.replace(/\.[^/.]+$/, "").replace(/_/g, " ").trim()}
+                      </Badge>
+                    </div>
+                  )}
                   <CardTitle className="text-lg font-medium text-foreground leading-relaxed">
                     {question.question}
                   </CardTitle>
@@ -590,8 +599,15 @@ function QuizContent() {
                         <XCircle className="w-6 h-6 text-red-500" />
                       )}
                     </div>
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground mb-1">Question {idx + 1}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-sm font-medium text-muted-foreground">Question {idx + 1}</span>
+                        {q.source_document && (
+                          <Badge variant="outline" className="text-[11px] py-0 px-2 font-normal bg-secondary/50 text-muted-foreground border-border">
+                            {q.source_document.replace(/\.[^/.]+$/, "").replace(/_/g, " ").trim()}
+                          </Badge>
+                        )}
+                      </div>
                       <CardTitle className="text-lg font-medium text-foreground leading-snug">
                         {q.question}
                       </CardTitle>
