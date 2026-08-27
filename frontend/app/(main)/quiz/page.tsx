@@ -5,8 +5,14 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Clock, ChevronLeft, ChevronRight, FileText, Play, BookOpenCheck, CheckCircle2, XCircle, Settings } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Clock, ChevronLeft, ChevronRight, ChevronDown, FileText, Play, BookOpenCheck, CheckCircle2, XCircle, Settings, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -60,7 +66,14 @@ function QuizContent() {
   const [resultData, setResultData] = useState<QuizSubmitResponse | null>(null);
   
   const [subjectId, setSubjectId] = useState<string | null>(initialSubjectId);
-  const [topic, setTopic] = useState<string>(initialTopic);
+
+  // Selected document IDs for the quiz retrieval scope
+  const [selectedDocIds, setSelectedDocIds] = useState<number[]>(() => {
+    if (initialDocumentIds) {
+      return initialDocumentIds.split(",").map(Number).filter(Boolean);
+    }
+    return [];
+  });
 
   // Configuration state
   const [configNumQuestions, setConfigNumQuestions] = useState(5);
@@ -74,6 +87,46 @@ function QuizContent() {
     },
     enabled: view === "hub"
   });
+
+  // Fetch documents for the active subject
+  const { data: subjectDocuments = [] } = useQuery<{ id: number; filename: string }[]>({
+    queryKey: ['subject_documents', subjectId],
+    queryFn: async () => {
+      if (!subjectId) return [];
+      const { data } = await api.get(`/subjects/${subjectId}/documents`);
+      return data;
+    },
+    enabled: !!subjectId,
+  });
+
+  // Default to selecting all documents if none preselected
+  useEffect(() => {
+    if (subjectDocuments.length > 0 && selectedDocIds.length === 0 && !initialDocumentIds) {
+      setSelectedDocIds(subjectDocuments.map((d) => d.id));
+    }
+  }, [subjectDocuments, initialDocumentIds, selectedDocIds.length]);
+
+  const cleanDocName = (filename: string) => {
+    return filename.replace(/\.[^/.]+$/, "").replace(/_/g, " ").trim();
+  };
+
+  const getResolvedTopicName = () => {
+    if (selectedDocIds.length === 0) {
+      return rawTopicParam ? decodeURIComponent(rawTopicParam).replace(/\.[^/.]+$/, "").replace(/_/g, " ").trim() : "General Topic";
+    }
+    const selectedDocs = subjectDocuments.filter((d) => selectedDocIds.includes(d.id));
+    if (selectedDocs.length === 1) {
+      return cleanDocName(selectedDocs[0].filename);
+    }
+    if (selectedDocs.length === subjectDocuments.length && subjectDocuments.length > 1) {
+      const currentSubject = subjects.find((s: any) => s.id.toString() === subjectId);
+      return currentSubject ? `${currentSubject.name} (All Topics)` : "All Topics";
+    }
+    if (selectedDocs.length > 0) {
+      return selectedDocs.map((d) => cleanDocName(d.filename)).join(", ");
+    }
+    return "General Topic";
+  };
 
   const generateMutation = useMutation({
     mutationFn: async (params: { subject_id: number; topic: string; num_questions: number; difficulty: string; document_ids?: number[] }) => {
@@ -115,21 +168,22 @@ function QuizContent() {
     }
   });
 
-  const handleStartFromHub = (subjId: number, t: string) => {
+  const handleStartFromHub = (subjId: number, subName: string) => {
     setSubjectId(subjId.toString());
-    setTopic(t);
+    setSelectedDocIds([]); // Will auto-select all upon fetching
     setView("config");
   };
 
   const handleStartGeneration = () => {
-    if (!subjectId) return;
+    if (!subjectId || selectedDocIds.length === 0) return;
+    const finalTopic = getResolvedTopicName();
     setView("generating");
     generateMutation.mutate({
       subject_id: parseInt(subjectId, 10),
-      topic,
+      topic: finalTopic,
       num_questions: configNumQuestions,
       difficulty: configDifficulty,
-      document_ids: documentIds,
+      document_ids: selectedDocIds,
     });
   };
 
@@ -160,7 +214,7 @@ function QuizContent() {
                       Mastery: {sub.overall_mastery}%
                     </div>
                   </div>
-                  <Button onClick={() => handleStartFromHub(sub.id, `Review ${sub.name}`)}>
+                  <Button onClick={() => handleStartFromHub(sub.id, sub.name)}>
                     <Settings className="w-4 h-4 mr-2" />
                     Configure
                   </Button>
@@ -184,15 +238,100 @@ function QuizContent() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Topic Name */}
+            {/* Topic Dropdown Checklist */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Topic / Slide Focus</label>
-              <Input
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="e.g. Deadlock, Process Management"
-                className="bg-secondary border-border font-medium"
-              />
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground">Topic / Slide Focus</label>
+                <span className="text-xs text-muted-foreground">
+                  {selectedDocIds.length} of {subjectDocuments.length} selected
+                </span>
+              </div>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-secondary border border-border hover:border-primary/50 transition-colors text-left text-sm"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                      <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span className="truncate font-medium text-foreground">
+                        {getResolvedTopicName()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <Badge variant="outline" className="text-xs px-2 py-0.5 bg-background/50 border-border">
+                        {selectedDocIds.length} file{selectedDocIds.length === 1 ? "" : "s"}
+                      </Badge>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[360px] p-3 space-y-3 bg-card border-border shadow-xl rounded-xl" align="start">
+                  <div className="flex items-center justify-between pb-2 border-b border-border">
+                    <span className="text-xs font-semibold text-foreground">Include in Quiz:</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDocIds(subjectDocuments.map((d) => d.id))}
+                        className="text-xs text-primary hover:underline font-medium"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-muted-foreground text-xs">•</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (subjectDocuments.length > 0) {
+                            setSelectedDocIds([subjectDocuments[0].id]);
+                          }
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[220px] overflow-y-auto space-y-1.5 pr-1">
+                    {subjectDocuments.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2 text-center">No documents found for this subject.</p>
+                    ) : (
+                      subjectDocuments.map((doc) => {
+                        const isChecked = selectedDocIds.includes(doc.id);
+                        const cleanTitle = cleanDocName(doc.filename);
+                        return (
+                          <label
+                            key={doc.id}
+                            className={cn(
+                              "flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors text-xs",
+                              isChecked
+                                ? "bg-primary/10 border border-primary/20 text-foreground"
+                                : "hover:bg-secondary/60 text-muted-foreground"
+                            )}
+                          >
+                            <Checkbox
+                              checked={isChecked}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedDocIds((prev) => [...prev, doc.id]);
+                                } else {
+                                  if (selectedDocIds.length > 1) {
+                                    setSelectedDocIds((prev) => prev.filter((id) => id !== doc.id));
+                                  }
+                                }
+                              }}
+                              className="h-4 w-4"
+                            />
+                            <FileText className="w-3.5 h-3.5 flex-shrink-0 text-primary/70" />
+                            <span className="truncate font-medium flex-1">{cleanTitle}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="space-y-4">

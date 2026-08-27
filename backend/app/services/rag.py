@@ -28,6 +28,8 @@ GROUNDED_SYSTEM_PROMPT = (
 QUIZ_SYSTEM_PROMPT = (
     "You are a quiz generator for a study app. Using ONLY the CONTEXT "
     "provided, write multiple-choice questions about the given topic. "
+    "If the context contains multiple source documents, you MUST generate questions "
+    "that cover concepts from EACH source document fairly and evenly. "
     "For each question, produce exactly one correct answer and three "
     "plausible but incorrect distractors (not random nonsense -- they "
     "should reflect common misconceptions). "
@@ -84,7 +86,8 @@ def answer_question(subject_id: int, question: str, document_ids: list[int] | No
 
 def generate_quiz(subject_id: int, topic: str, num_questions: int, difficulty: str, document_ids: list[int] | None = None) -> dict:
     client = _require_client()
-    chunks = retrieve_relevant_chunks(subject_id, topic, top_k=8, document_ids=document_ids)
+    retrieval_k = max(8, len(document_ids) * 4) if document_ids else 8
+    chunks = retrieve_relevant_chunks(subject_id, topic, top_k=retrieval_k, document_ids=document_ids)
     context = _format_context(chunks)
 
     completion = client.chat.completions.create(

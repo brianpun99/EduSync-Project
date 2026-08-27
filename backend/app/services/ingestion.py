@@ -120,13 +120,39 @@ def retrieve_relevant_chunks(
     if collection.count() == 0:
         return []
 
-    # Scope retrieval to only the selected documents (checklist filter).
+    # If multiple document_ids are specified, perform stratified (balanced) retrieval
+    # across each selected document so that one document cannot starve out the others.
+    if document_ids and len(document_ids) > 1:
+        per_doc_k = max(2, (top_k + len(document_ids) - 1) // len(document_ids))
+        chunks = []
+        for doc_id in document_ids:
+            try:
+                results = collection.query(
+                    query_texts=[query],
+                    n_results=min(per_doc_k, collection.count()),
+                    where={"document_id": doc_id},
+                )
+                docs = results.get("documents", [[]])[0]
+                metas = results.get("metadatas", [[]])[0]
+                dists = results.get("distances", [[]])[0]
+                for doc_text, meta, distance in zip(docs, metas, dists):
+                    chunks.append(
+                        {
+                            "text": doc_text,
+                            "filename": meta.get("filename", "unknown"),
+                            "score": round(max(0.0, 1 - distance), 3),
+                        }
+                    )
+            except Exception:
+                continue
+        # Retain balanced chunks sorted by score
+        chunks.sort(key=lambda c: c["score"], reverse=True)
+        return chunks
+
+    # Single document or entire subject
     where_filter = None
-    if document_ids:
-        if len(document_ids) == 1:
-            where_filter = {"document_id": document_ids[0]}
-        else:
-            where_filter = {"document_id": {"$in": document_ids}}
+    if document_ids and len(document_ids) == 1:
+        where_filter = {"document_id": document_ids[0]}
 
     results = collection.query(
         query_texts=[query],
@@ -142,7 +168,6 @@ def retrieve_relevant_chunks(
             {
                 "text": doc_text,
                 "filename": meta.get("filename", "unknown"),
-                # Chroma returns a distance; convert to an intuitive 0-1 similarity score.
                 "score": round(max(0.0, 1 - distance), 3),
             }
         )
