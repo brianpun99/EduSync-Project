@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +37,8 @@ import {
   History,
   X,
   MessageSquare,
+  ChevronDown,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -146,6 +154,36 @@ export default function StudyWorkspacePage({ params }: PageProps) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+
+  // ── Document scope checklist ────────────────────────────────────────────────
+  const currentDocId = parseInt(documentId, 10);
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(
+    () => new Set([currentDocId])
+  );
+  const [scopeOpen, setScopeOpen] = useState(false);
+
+  // Fetch all sibling documents in this subject for the checklist
+  const { data: siblingDocs = [] } = useQuery<{ id: number; filename: string }[]>({
+    queryKey: ["subject_documents", subjectId],
+    queryFn: async () => {
+      const { data } = await api.get(`/subjects/${subjectId}/documents`);
+      return data;
+    },
+  });
+
+  const toggleDocId = (docId: number) => {
+    setSelectedDocIds((prev) => {
+      const next = new Set(prev);
+      // Prevent unchecking the current document
+      if (docId === currentDocId) return next;
+      if (next.has(docId)) {
+        next.delete(docId);
+      } else {
+        next.add(docId);
+      }
+      return next;
+    });
+  };
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   // ── PDF viewer state ────────────────────────────────────────────────────────
@@ -213,8 +251,9 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     mutationFn: async (question: string) => {
       const { data } = await api.post("/query", {
         subject_id: parseInt(subjectId, 10),
-        document_id: parseInt(documentId, 10),
+        document_id: currentDocId,
         question,
+        document_ids: Array.from(selectedDocIds),
       });
       return data;
     },
@@ -272,7 +311,8 @@ export default function StudyWorkspacePage({ params }: PageProps) {
   });
 
   const handleGenerateQuiz = () => {
-    router.push(`/quiz?subjectId=${subjectId}&documentId=${documentId}`);
+    const docIdsParam = Array.from(selectedDocIds).join(",");
+    router.push(`/quiz?subjectId=${subjectId}&documentId=${documentId}&documentIds=${docIdsParam}`);
   };
 
   const handleOpenHistory = () => {
@@ -399,6 +439,64 @@ export default function StudyWorkspacePage({ params }: PageProps) {
             History
           </Button>
         </div>
+
+        {/* ── Document Scope Checklist ──────────────────────────────────────── */}
+        {siblingDocs.length > 1 && (
+          <Collapsible open={scopeOpen} onOpenChange={setScopeOpen}>
+            <CollapsibleTrigger asChild>
+              <button className="w-full flex items-center justify-between px-4 py-2 border-b border-border bg-secondary/30 hover:bg-secondary/50 transition-colors text-xs">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Filter className="w-3.5 h-3.5" />
+                  <span className="font-medium">Retrieval Scope</span>
+                  <span className="text-primary font-semibold">
+                    {selectedDocIds.size} of {siblingDocs.length} files
+                  </span>
+                </div>
+                <ChevronDown
+                  className={cn(
+                    "w-3.5 h-3.5 text-muted-foreground transition-transform duration-200",
+                    scopeOpen && "rotate-180"
+                  )}
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-4 py-2 border-b border-border bg-secondary/20 space-y-1.5">
+                <p className="text-[11px] text-muted-foreground mb-2">
+                  Select which documents the AI should reference:
+                </p>
+                {siblingDocs.map((doc) => (
+                  <label
+                    key={doc.id}
+                    className={cn(
+                      "flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors text-xs",
+                      doc.id === currentDocId
+                        ? "bg-primary/10 border border-primary/20"
+                        : "hover:bg-secondary/60",
+                      selectedDocIds.has(doc.id)
+                        ? "text-foreground"
+                        : "text-muted-foreground"
+                    )}
+                  >
+                    <Checkbox
+                      checked={selectedDocIds.has(doc.id)}
+                      onCheckedChange={() => toggleDocId(doc.id)}
+                      disabled={doc.id === currentDocId}
+                      className="h-3.5 w-3.5"
+                    />
+                    <FileText className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate">{doc.filename}</span>
+                    {doc.id === currentDocId && (
+                      <span className="ml-auto text-[10px] text-primary font-medium">
+                        current
+                      </span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
 
         {/* Messages (current session only — starts blank) */}
         <div className="flex-1 overflow-auto p-4 space-y-5">

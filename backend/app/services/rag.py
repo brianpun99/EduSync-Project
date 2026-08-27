@@ -60,9 +60,9 @@ def _format_context(chunks: List[dict]) -> str:
     return "\n\n".join(parts)
 
 
-def answer_question(subject_id: int, question: str) -> dict:
+def answer_question(subject_id: int, question: str, document_ids: list[int] | None = None) -> dict:
     client = _require_client()
-    chunks = retrieve_relevant_chunks(subject_id, question)
+    chunks = retrieve_relevant_chunks(subject_id, question, document_ids=document_ids)
     context = _format_context(chunks)
 
     completion = client.chat.completions.create(
@@ -82,9 +82,9 @@ def answer_question(subject_id: int, question: str) -> dict:
     return {"answer": answer_text, "sources": sources}
 
 
-def generate_quiz(subject_id: int, topic: str, num_questions: int, difficulty: str) -> dict:
+def generate_quiz(subject_id: int, topic: str, num_questions: int, difficulty: str, document_ids: list[int] | None = None) -> dict:
     client = _require_client()
-    chunks = retrieve_relevant_chunks(subject_id, topic, top_k=8)
+    chunks = retrieve_relevant_chunks(subject_id, topic, top_k=8, document_ids=document_ids)
     context = _format_context(chunks)
 
     completion = client.chat.completions.create(

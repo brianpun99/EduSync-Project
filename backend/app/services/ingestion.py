@@ -110,11 +110,29 @@ def estimate_subject_storage_mb(subject_id: int) -> float:
     return round(total_bytes / (1024 * 1024), 2)
 
 
-def retrieve_relevant_chunks(subject_id: int, query: str, top_k: int = RETRIEVAL_TOP_K):
+def retrieve_relevant_chunks(
+    subject_id: int,
+    query: str,
+    top_k: int = RETRIEVAL_TOP_K,
+    document_ids: list[int] | None = None,
+):
     collection = get_collection(subject_id)
     if collection.count() == 0:
         return []
-    results = collection.query(query_texts=[query], n_results=min(top_k, collection.count()))
+
+    # Scope retrieval to only the selected documents (checklist filter).
+    where_filter = None
+    if document_ids:
+        if len(document_ids) == 1:
+            where_filter = {"document_id": document_ids[0]}
+        else:
+            where_filter = {"document_id": {"$in": document_ids}}
+
+    results = collection.query(
+        query_texts=[query],
+        n_results=min(top_k, collection.count()),
+        where=where_filter,
+    )
     chunks = []
     documents = results.get("documents", [[]])[0]
     metadatas = results.get("metadatas", [[]])[0]

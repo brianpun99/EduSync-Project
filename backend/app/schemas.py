@@ -63,6 +63,7 @@ class QueryRequest(BaseModel):
     subject_id: int
     document_id: int
     question: str = Field(min_length=1, max_length=2000)
+    document_ids: Optional[List[int]] = None  # checklist filter — scoped doc IDs
 
 
 class SourceChunk(BaseModel):
@@ -91,6 +92,7 @@ class QuizGenerateRequest(BaseModel):
     topic: str
     num_questions: int = Field(default=5, ge=1, le=20)
     difficulty: str = Field(default="Mixed")
+    document_ids: Optional[List[int]] = None  # checklist filter — scoped doc IDs
 
 
 class QuizOption(BaseModel):

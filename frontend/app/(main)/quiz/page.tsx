@@ -40,6 +40,12 @@ function QuizContent() {
   
   const initialSubjectId = searchParams.get("subjectId");
   const initialTopic = searchParams.get("documentId") || "General Topic"; // Or some default
+  const initialDocumentIds = searchParams.get("documentIds");
+
+  // Parse comma-separated document IDs from the study workspace checklist
+  const documentIds: number[] | undefined = initialDocumentIds
+    ? initialDocumentIds.split(",").map(Number).filter(Boolean)
+    : undefined;
 
   // We start in config view if navigating directly from a study page, else hub
   const [view, setView] = useState<"hub" | "config" | "generating" | "quiz" | "result">(initialSubjectId ? "config" : "hub");
@@ -66,7 +72,7 @@ function QuizContent() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: async (params: { subject_id: number; topic: string; num_questions: number; difficulty: string }) => {
+    mutationFn: async (params: { subject_id: number; topic: string; num_questions: number; difficulty: string; document_ids?: number[] }) => {
       const { data } = await api.post('/quiz/generate', params);
       return data as QuizGenerateResponse;
     },
@@ -118,7 +124,8 @@ function QuizContent() {
       subject_id: parseInt(subjectId, 10),
       topic,
       num_questions: configNumQuestions,
-      difficulty: configDifficulty
+      difficulty: configDifficulty,
+      document_ids: documentIds,
     });
   };
 

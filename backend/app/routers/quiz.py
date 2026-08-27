@@ -49,6 +49,7 @@ def create_quiz(payload: QuizGenerateRequest, _user_id: int = Depends(require_au
             payload.topic,
             payload.num_questions,
             payload.difficulty,
+            document_ids=payload.document_ids,
         )
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc))

@@ -36,7 +36,9 @@ def query(
     if doc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found.")
 
-    result = answer_question(payload.subject_id, payload.question)
+    # Default to current document if no checklist selection provided
+    doc_ids = payload.document_ids if payload.document_ids else [payload.document_id]
+    result = answer_question(payload.subject_id, payload.question, document_ids=doc_ids)
 
     # Persist user message
     db.execute(
