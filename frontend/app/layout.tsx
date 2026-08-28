@@ -30,6 +30,7 @@ export const metadata: Metadata = {
 }
 
 import { Providers } from './providers'
+import { Toaster } from '@/components/ui/sonner'
 
 export default function RootLayout({
   children,
@@ -41,6 +42,7 @@ export default function RootLayout({
       <body className="font-sans antialiased bg-background text-foreground">
         <Providers>
           {children}
+          <Toaster />
           {process.env.NODE_ENV === 'production' && <Analytics />}
         </Providers>
       </body>

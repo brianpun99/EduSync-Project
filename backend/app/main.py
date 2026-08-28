@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import ALLOWED_ORIGINS, HOST, PORT
 from app.database import init_db
-from app.routers import analytics, auth, documents, query, quiz
+from app.routers import analytics, auth, data, documents, query, quiz
 
 app = FastAPI(
     title="EduSync API",
@@ -40,6 +40,7 @@ app.include_router(documents.router)
 app.include_router(query.router)
 app.include_router(quiz.router)
 app.include_router(analytics.router)
+app.include_router(data.router)
 
 
 @app.on_event("startup")

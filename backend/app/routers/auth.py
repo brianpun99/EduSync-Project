@@ -86,6 +86,23 @@ def recover(payload: RecoverRequest, db: sqlite3.Connection = Depends(get_db)):
     return TokenResponse(access_token=create_session_token(row["id"]))
 
 
+@router.post("/verify-password")
+def verify_password(payload: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
+    """
+    Identity gate used by the 'View Recovery Key' flow in Settings.
+    Verifies the user's current password without issuing a new JWT.
+    """
+    row = db.execute(
+        "SELECT id, password_hash FROM users WHERE email = ?", (payload.email.lower(),)
+    ).fetchone()
+    if row is None or not verify_secret(payload.password, row["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+        )
+    return {"valid": True}
+
+
 @router.get("/status")
 def auth_status(db: sqlite3.Connection = Depends(get_db)):
     """Lets the frontend decide whether to show Login or the first-run Register screen."""

@@ -24,6 +24,13 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
+  // -- Recovery mode --
+  const [showRecoveryForm, setShowRecoveryForm] = useState(false);
+  const [recoverEmail, setRecoverEmail] = useState("");
+  const [recoverKey, setRecoverKey] = useState("");
+  const [recoverNewPassword, setRecoverNewPassword] = useState("");
+  const [recoverError, setRecoverError] = useState("");
+
   const { data: authStatus } = useQuery({
     queryKey: ['authStatus'],
     queryFn: async () => {
@@ -74,6 +81,30 @@ export default function LoginPage() {
   const handleLogin = (e: FormEvent) => {
     e.preventDefault();
     loginMutation.mutate();
+  };
+
+  const recoverMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/auth/recover', {
+        email: recoverEmail,
+        recovery_key: recoverKey,
+        new_password: recoverNewPassword,
+      });
+      return data;
+    },
+    onSuccess: (data) => {
+      localStorage.setItem('access_token', data.access_token);
+      router.push('/dashboard');
+    },
+    onError: (error: any) => {
+      setRecoverError(error.response?.data?.detail || "Recovery failed. Check your email and recovery key.");
+    },
+  });
+
+  const handleRecover = (e: FormEvent) => {
+    e.preventDefault();
+    setRecoverError("");
+    recoverMutation.mutate();
   };
 
   const handleCopyKey = () => {
@@ -163,13 +194,88 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {mode === "login" && (
+          {mode === "login" && !showRecoveryForm && (
             <button
               type="button"
               className="w-full mt-3 text-sm text-primary hover:underline"
+              onClick={() => {
+                setShowRecoveryForm(true);
+                setRecoverError("");
+              }}
             >
               Use Offline Recovery Key
             </button>
+          )}
+
+          {showRecoveryForm && (
+            <div className="mt-4 space-y-4">
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                  <h3 className="text-sm font-semibold text-foreground">Account Recovery</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Enter your email, recovery key, and a new password to regain access.
+                </p>
+
+                {recoverError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg mb-3">
+                    <p className="text-xs text-red-400">{recoverError}</p>
+                  </div>
+                )}
+
+                <form onSubmit={handleRecover} className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-foreground">Email</label>
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={recoverEmail}
+                      onChange={(e) => setRecoverEmail(e.target.value)}
+                      className="bg-secondary border-border"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-foreground">Recovery Key</label>
+                    <Input
+                      type="text"
+                      placeholder="EDUSYNC-XXXX-XXXX-XXXX"
+                      value={recoverKey}
+                      onChange={(e) => setRecoverKey(e.target.value)}
+                      className="bg-secondary border-border font-mono"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-foreground">New Password</label>
+                    <Input
+                      type="password"
+                      placeholder="Enter a new password (min 8 chars)"
+                      value={recoverNewPassword}
+                      onChange={(e) => setRecoverNewPassword(e.target.value)}
+                      className="bg-secondary border-border"
+                      minLength={8}
+                      required
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    className="w-full bg-primary hover:bg-primary/90"
+                    disabled={recoverMutation.isPending}
+                  >
+                    {recoverMutation.isPending ? "Recovering…" : "Reset Password & Sign In"}
+                  </Button>
+                  <button
+                    type="button"
+                    className="w-full text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowRecoveryForm(false)}
+                  >
+                    ← Back to login
+                  </button>
+                </form>
+              </div>
+            </div>
           )}
 
           {authStatus?.account_exists && (
