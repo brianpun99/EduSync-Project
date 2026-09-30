@@ -547,8 +547,8 @@ function QuizContent() {
               {resultData.is_weak && (
                 <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 max-w-2xl mx-auto">
                   <p className="text-sm text-orange-400 leading-relaxed text-center">
-                    <strong>{`"${quizData?.topic}"`}</strong> has been flagged as a <strong>Knowledge Gap</strong> 
-                    and will be prioritized in future sessions.
+                    <strong>{`"${quizData?.topic}"`}</strong> has been flagged as a{" "}
+                    <strong>Knowledge Gap</strong> and will be prioritized in future sessions.
                   </p>
                 </div>
               )}
@@ -568,7 +568,7 @@ function QuizContent() {
                   Back to Hub
                 </Button>
                 <Button 
-                  className="border-primary/40 text-primary hover:bg-primary/10"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium cursor-pointer"
                   onClick={() => setView("hub")}
                 >
                   New Quiz
