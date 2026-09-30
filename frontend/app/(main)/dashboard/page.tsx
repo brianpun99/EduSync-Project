@@ -87,7 +87,7 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
+        <StatCard
           label="Overall Mastery"
           value={`${dashboard?.overall_mastery || 0}%`}
           subtext="Knowledge retention score"
@@ -95,19 +95,19 @@ export default function DashboardPage() {
           showProgress
           progress={dashboard?.overall_mastery || 0}
         />
-        <StatCard 
+        <StatCard
           label="Documents"
           value={`${dashboard?.document_count || 0}`}
           subtext="Vectorized study materials"
           color="cyan"
         />
-        <StatCard 
+        <StatCard
           label="Weak Topics"
           value={`${dashboard?.weak_topics.length || 0}`}
           subtext="Flagged for revision"
           color="orange"
         />
-        <StatCard 
+        <StatCard
           label="Study Time"
           value={dashboard?.study_time_formatted || "0h 0m"}
           subtext="Total learning duration"
@@ -116,24 +116,31 @@ export default function DashboardPage() {
       </div>
 
       {/* Main content grid */}
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-6 pt-3">
         {/* Weak Topics */}
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg font-semibold text-foreground">Top Weak Topics</CardTitle>
+        <Card className="bg-card border-border flex flex-col h-[425px]">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 flex-shrink-0">
+            <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+              Top Weak Topics
+              {dashboard?.weak_topics && dashboard.weak_topics.length > 0 && (
+                <Badge variant="outline" className="text-xs text-orange-400 border-orange-500/30 bg-orange-500/10">
+                  {dashboard.weak_topics.length}
+                </Badge>
+              )}
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
             {dashboard?.weak_topics && dashboard.weak_topics.length > 0 ? (
               dashboard.weak_topics.map((topic, idx) => (
-                <WeakTopicCard 
-                  key={idx} 
+                <WeakTopicCard
+                  key={idx}
                   topic={topic.topic}
                   subject={topic.subject}
                   masteryScore={topic.mastery_score}
                 />
               ))
             ) : (
-              <div className="text-center py-10 text-muted-foreground space-y-2">
+              <div className="h-full flex flex-col items-center justify-center py-10 text-muted-foreground space-y-2">
                 <CheckCircle2 className="w-8 h-8 mx-auto text-green-400 opacity-80" />
                 <p className="text-sm font-medium text-foreground">No Knowledge Gaps Detected</p>
                 <p className="text-xs">All studied topics are at or above the 60% mastery threshold.</p>
@@ -143,17 +150,24 @@ export default function DashboardPage() {
         </Card>
 
         {/* Recent Activity */}
-        <Card className="bg-card border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg font-semibold text-foreground">Recent Activity</CardTitle>
+        <Card className="bg-card border-border flex flex-col h-[425px]">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 flex-shrink-0">
+            <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+              Recent Activity
+              {dashboard?.recent_activities && dashboard.recent_activities.length > 0 && (
+                <Badge variant="outline" className="text-xs text-muted-foreground border-border bg-secondary/50">
+                  {dashboard.recent_activities.length}
+                </Badge>
+              )}
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
             {dashboard?.recent_activities && dashboard.recent_activities.length > 0 ? (
               dashboard.recent_activities.map((item) => (
                 <ActivityRow key={item.id} item={item} />
               ))
             ) : (
-              <div className="text-center py-10 text-muted-foreground space-y-2">
+              <div className="h-full flex flex-col items-center justify-center py-10 text-muted-foreground space-y-2">
                 <Clock className="w-8 h-8 mx-auto opacity-40" />
                 <p className="text-sm font-medium text-foreground">No Recent Activity</p>
                 <p className="text-xs">Your quiz attempts, uploads, and study chats will show up here.</p>
@@ -214,16 +228,16 @@ function ActivityRow({ item }: { item: ActivityItem }) {
   );
 }
 
-function StatCard({ 
-  label, 
-  value, 
-  subtext, 
-  trend, 
+function StatCard({
+  label,
+  value,
+  subtext,
+  trend,
   trendValue,
   color,
   showProgress,
-  progress 
-}: { 
+  progress
+}: {
   label: string
   value: string
   subtext: string

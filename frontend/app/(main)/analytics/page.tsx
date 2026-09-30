@@ -94,7 +94,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Charts Grid */}
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-6 pt-3">
         {/* Performance Trend */}
         <Card className="bg-card border-border">
           <CardHeader>
@@ -221,30 +221,33 @@ export default function AnalyticsPage() {
       {/* Recent Quiz History Table */}
       {analytics?.quiz_score_trend && analytics.quiz_score_trend.length > 0 && (
         <Card className="bg-card border-border">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-primary" />
               Recent Quiz History
+              <span className="text-xs font-normal text-muted-foreground ml-1">
+                ({analytics.quiz_score_trend.length} attempt{analytics.quiz_score_trend.length !== 1 ? "s" : ""})
+              </span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
+          <CardContent className="p-0">
+            <div className="max-h-[340px] overflow-y-auto overflow-x-auto custom-scrollbar px-6 pb-4">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/50">
-                    <th className="text-left py-2 px-3 text-muted-foreground font-medium">Date</th>
-                    <th className="text-left py-2 px-3 text-muted-foreground font-medium">Subject</th>
-                    <th className="text-left py-2 px-3 text-muted-foreground font-medium">Topic</th>
-                    <th className="text-right py-2 px-3 text-muted-foreground font-medium">Score</th>
+                <thead className="sticky top-0 bg-card z-10">
+                  <tr className="border-b border-border/50 bg-card">
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium bg-card">Date</th>
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium bg-card">Subject</th>
+                    <th className="text-left py-2.5 px-3 text-muted-foreground font-medium bg-card">Topic</th>
+                    <th className="text-right py-2.5 px-3 text-muted-foreground font-medium bg-card">Score</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[...analytics.quiz_score_trend].reverse().slice(0, 10).map((entry, i) => (
+                  {[...analytics.quiz_score_trend].reverse().map((entry, i) => (
                     <tr key={i} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
-                      <td className="py-2.5 px-3 text-muted-foreground">
+                      <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
                         {new Date(entry.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                       </td>
-                      <td className="py-2.5 px-3 text-foreground">{entry.subject}</td>
+                      <td className="py-2.5 px-3 text-foreground font-medium">{entry.subject}</td>
                       <td className="py-2.5 px-3 text-foreground">{entry.topic}</td>
                       <td className="py-2.5 px-3 text-right">
                         <span className={cn(
