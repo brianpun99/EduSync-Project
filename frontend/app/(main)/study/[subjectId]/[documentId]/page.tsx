@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, FormEvent, use } from "react";
+import { useState, useEffect, useRef, FormEvent, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -44,12 +44,22 @@ import {
   MessageSquare,
   ChevronDown,
   Filter,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  Highlighter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import {
+  findSnippetMatchesInPage,
+  applyHighlightsToText,
+  escapeHtml,
+  type HighlightRange,
+} from "@/lib/pdf-highlighter";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -57,6 +67,7 @@ interface Source {
   document: string;
   snippet: string;
   score: number;
+  pageNumber?: number;
 }
 
 interface ChatMessage {
@@ -81,7 +92,25 @@ function formatTimestamp(iso?: string): string {
   return `${time} · ${date}`;
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+interface MessageBubbleProps {
+  message: ChatMessage;
+  activeSourceIdx: number | null;
+  activeSources: Source[];
+  sourcePageMap: Record<number, number>;
+  currentDocName?: string;
+  onSelectSource: (source: Source, index: number, allSources: Source[]) => void;
+  onOpenOtherDoc?: (docName: string) => void;
+}
+
+function MessageBubble({
+  message,
+  activeSourceIdx,
+  activeSources,
+  sourcePageMap,
+  currentDocName,
+  onSelectSource,
+  onOpenOtherDoc,
+}: MessageBubbleProps) {
   return (
     <div className="flex flex-col gap-1">
       <div className={cn("flex gap-3", message.role === "user" ? "flex-row-reverse" : "")}>
@@ -129,19 +158,78 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       {message.role === "assistant" &&
         message.sources &&
         message.sources.length > 0 && (
-          <div className="ml-11 max-w-[85%] mt-1">
-            <div className="text-xs font-medium text-muted-foreground mb-1.5">Sources</div>
+          <div className="ml-11 max-w-[85%] mt-1.5 space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-medium flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-purple-400" />
+                Cited Sources
+              </span>
+              <span className="text-[11px] text-purple-400/80">Click to highlight in PDF</span>
+            </div>
             <div className="flex flex-wrap gap-1.5">
-              {message.sources.map((source, sIdx) => (
-                <div
-                  key={sIdx}
-                  className="flex items-center gap-1.5 px-2 py-1 bg-card rounded border border-border text-xs"
-                >
-                  <FileText className="w-3 h-3 text-primary flex-shrink-0" />
-                  <span className="text-foreground max-w-[100px] truncate">{source.document}</span>
-                  <span className="text-green-400 font-medium">{Math.round(source.score * 100)}%</span>
-                </div>
-              ))}
+              {message.sources.map((source, sIdx) => {
+                const isCurrentDoc = !currentDocName || source.document === currentDocName;
+                const pageNumber = sourcePageMap[sIdx] ?? source.pageNumber;
+                const isSelected =
+                  activeSources.includes(source) &&
+                  (activeSourceIdx === sIdx || (activeSourceIdx === null && sIdx === 0));
+
+                return (
+                  <button
+                    key={sIdx}
+                    type="button"
+                    onClick={() => {
+                      if (isCurrentDoc) {
+                        onSelectSource(source, sIdx, message.sources || []);
+                      } else if (onOpenOtherDoc) {
+                        onOpenOtherDoc(source.document);
+                      }
+                    }}
+                    title={
+                      isCurrentDoc
+                        ? pageNumber
+                          ? `Jump to source on page ${pageNumber}`
+                          : "Jump to cited source location in PDF"
+                        : `Open source document: ${source.document}`
+                    }
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs text-left transition-all group cursor-pointer",
+                      isSelected
+                        ? "bg-purple-500/20 border-purple-500/70 text-purple-200 shadow-sm shadow-purple-500/10 ring-1 ring-purple-500/50"
+                        : "bg-card border-border hover:border-purple-500/40 hover:bg-purple-500/5 text-foreground"
+                    )}
+                  >
+                    <FileText
+                      className={cn(
+                        "w-3.5 h-3.5 flex-shrink-0 transition-colors",
+                        isSelected ? "text-purple-300" : "text-purple-400 group-hover:text-purple-300"
+                      )}
+                    />
+                    <span className="font-medium max-w-[110px] truncate">{source.document}</span>
+
+                    {/* Page badge */}
+                    {isCurrentDoc && pageNumber ? (
+                      <span
+                        className={cn(
+                          "px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide",
+                          isSelected
+                            ? "bg-purple-500 text-white shadow-sm"
+                            : "bg-purple-500/20 text-purple-300"
+                        )}
+                      >
+                        p.{pageNumber}
+                      </span>
+                    ) : !isCurrentDoc ? (
+                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                    ) : null}
+
+                    {/* Relevance score */}
+                    <span className="text-green-400 text-[11px] font-medium ml-0.5">
+                      {Math.round(source.score * 100)}%
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -191,12 +279,21 @@ export default function StudyWorkspacePage({ params }: PageProps) {
   };
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  // ── PDF viewer state ────────────────────────────────────────────────────────
+  // ── PDF viewer & Source text highlighting state ─────────────────────────────
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.0);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const [pdfProxy, setPdfProxy] = useState<any>(null);
+  const [activeSources, setActiveSources] = useState<Source[]>([]);
+  const [selectedSourceIdx, setSelectedSourceIdx] = useState<number | null>(null);
+  const [showHighlights, setShowHighlights] = useState<boolean>(true);
+  const [pageHighlights, setPageHighlights] = useState<Record<number, Record<number, HighlightRange[]>>>({});
+  const [sourcePageMap, setSourcePageMap] = useState<Record<number, number>>({});
+  const [highlightsVersion, setHighlightsVersion] = useState(0);
+  const pageItemsCacheRef = useRef<Map<number, Array<{ str: string; hasEOL?: boolean }>>>(new Map());
 
   // ── Fetch document metadata ─────────────────────────────────────────────────
   const { data: docMeta } = useQuery({
@@ -206,6 +303,15 @@ export default function StudyWorkspacePage({ params }: PageProps) {
       return data.find((d: any) => d.id === parseInt(documentId, 10));
     },
   });
+
+  // ── Reset highlights & cache when documentId changes ────────────────────────
+  useEffect(() => {
+    pageItemsCacheRef.current.clear();
+    setPageHighlights({});
+    setSourcePageMap({});
+    setSelectedSourceIdx(null);
+    setPdfProxy(null);
+  }, [documentId]);
 
   // ── Fetch persisted history (kept separate — not auto-loaded into chat) ─────
   const { data: chatHistory = [], isLoading: isHistoryLoading, refetch: refetchHistory } = useQuery<ChatMessage[]>({
@@ -253,7 +359,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
         responseType: "blob",
       })
       .then((res) => {
-        const contentType = res.headers["content-type"] || "application/octet-stream";
+        const contentType = String(res.headers["content-type"] || "application/octet-stream");
         const blob = new Blob([res.data], { type: contentType });
         objectUrl = URL.createObjectURL(blob);
         setPdfUrl(objectUrl);
@@ -265,9 +371,170 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     };
   }, [subjectId, documentId]);
 
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
+  const onDocumentLoadSuccess = (pdf: any) => {
+    setNumPages(pdf.numPages);
     setCurrentPage(1);
+    setPdfProxy(pdf);
+  };
+
+  // ── Index document pages and calculate source text highlight ranges ────────
+  useEffect(() => {
+    if (!pdfProxy || !activeSources || activeSources.length === 0) {
+      setPageHighlights({});
+      setSourcePageMap({});
+      return;
+    }
+
+    let isMounted = true;
+
+    async function processHighlights() {
+      const currentFileName = docMeta?.filename;
+      const newPageHighlights: Record<number, Record<number, HighlightRange[]>> = {};
+      const newSourcePageMap: Record<number, number> = {};
+
+      const relevant = activeSources
+        .map((s, idx) => ({ ...s, originalIdx: idx }))
+        .filter((s) => !currentFileName || s.document === currentFileName);
+
+      if (relevant.length === 0) {
+        if (isMounted) {
+          setPageHighlights({});
+          setSourcePageMap({});
+        }
+        return;
+      }
+
+      // Pre-extract text items for all pages in this document if not yet cached
+      for (let p = 1; p <= pdfProxy.numPages; p++) {
+        if (!pageItemsCacheRef.current.has(p)) {
+          try {
+            const page = await pdfProxy.getPage(p);
+            const textContent = await page.getTextContent();
+            const items = textContent.items
+              .filter((item: any) => typeof item.str === "string")
+              .map((item: any) => ({ str: item.str, hasEOL: Boolean(item.hasEOL) }));
+            pageItemsCacheRef.current.set(p, items);
+          } catch (err) {
+            console.warn(`Error extracting text from page ${p}:`, err);
+          }
+        }
+      }
+
+      if (!isMounted) return;
+
+      for (const src of relevant) {
+        const isSelected =
+          selectedSourceIdx === src.originalIdx ||
+          (selectedSourceIdx === null && src.originalIdx === 0);
+        let firstMatchedPage: number | null = null;
+
+        for (let p = 1; p <= pdfProxy.numPages; p++) {
+          const items = pageItemsCacheRef.current.get(p);
+          if (!items || items.length === 0) continue;
+
+          const matches = findSnippetMatchesInPage(
+            items,
+            src.snippet,
+            src.originalIdx,
+            isSelected
+          );
+
+          if (matches.length > 0) {
+            if (firstMatchedPage === null) {
+              firstMatchedPage = p;
+            }
+            if (!newPageHighlights[p]) {
+              newPageHighlights[p] = {};
+            }
+            for (const m of matches) {
+              if (!newPageHighlights[p][m.itemIndex]) {
+                newPageHighlights[p][m.itemIndex] = [];
+              }
+              newPageHighlights[p][m.itemIndex].push(...m.ranges);
+            }
+          }
+        }
+
+        if (firstMatchedPage !== null) {
+          newSourcePageMap[src.originalIdx] = firstMatchedPage;
+        }
+      }
+
+      if (isMounted) {
+        setPageHighlights(newPageHighlights);
+        setSourcePageMap(newSourcePageMap);
+        setHighlightsVersion((v) => v + 1);
+
+        // Auto-navigate to page containing selected source
+        const targetIdx = selectedSourceIdx ?? 0;
+        const targetPage = newSourcePageMap[targetIdx];
+        if (targetPage && targetPage >= 1 && targetPage <= pdfProxy.numPages) {
+          setCurrentPage((prev) => (prev !== targetPage ? targetPage : prev));
+        }
+      }
+    }
+
+    processHighlights();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [pdfProxy, activeSources, selectedSourceIdx, docMeta?.filename]);
+
+  // ── Custom text renderer for react-pdf Page ────────────────────────────────
+  const customTextRenderer = useCallback(
+    ({ pageNumber, itemIndex, str }: { pageNumber: number; itemIndex: number; str: string }) => {
+      if (!showHighlights) {
+        return escapeHtml(str);
+      }
+      const ranges = pageHighlights[pageNumber]?.[itemIndex];
+      if (!ranges || ranges.length === 0) {
+        return escapeHtml(str);
+      }
+      return applyHighlightsToText(str, ranges);
+    },
+    [pageHighlights, showHighlights]
+  );
+
+  // ── Auto-scroll to active light purple highlight in PDF ────────────────────
+  const scrollToHighlight = useCallback(() => {
+    if (!containerRef.current || !showHighlights) return;
+    const activeMark =
+      containerRef.current.querySelector("mark.source-highlight.active") ||
+      containerRef.current.querySelector("mark.source-highlight");
+    if (activeMark) {
+      activeMark.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [showHighlights]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      scrollToHighlight();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [currentPage, selectedSourceIdx, pageHighlights, scrollToHighlight]);
+
+  // ── Source selection & navigation handlers ─────────────────────────────────
+  const handleSelectSource = (
+    source: Source,
+    index: number,
+    allSources: Source[]
+  ) => {
+    setActiveSources(allSources);
+    setSelectedSourceIdx(index);
+    setShowHighlights(true);
+
+    const targetPage = sourcePageMap[index] ?? source.pageNumber;
+    if (targetPage && targetPage >= 1 && targetPage <= numPages) {
+      setCurrentPage(targetPage);
+    }
+  };
+
+  const handleOpenOtherDoc = (filename: string) => {
+    const targetDoc = siblingDocs.find((d) => d.filename === filename);
+    if (targetDoc) {
+      router.push(`/study/${subjectId}/${targetDoc.id}`);
+    }
   };
 
   // ── Send message ─────────────────────────────────────────────────────────────
@@ -292,6 +559,11 @@ export default function StudyWorkspacePage({ params }: PageProps) {
           created_at: now,
         },
       ]);
+      if (data.sources && data.sources.length > 0) {
+        setActiveSources(data.sources);
+        setSelectedSourceIdx(0);
+        setShowHighlights(true);
+      }
       // Invalidate history cache so it refreshes next time panel opens
       queryClient.invalidateQueries({ queryKey: ["chat_history", subjectId, documentId] });
     },
@@ -331,6 +603,10 @@ export default function StudyWorkspacePage({ params }: PageProps) {
       queryClient.invalidateQueries({ queryKey: ["chat_history", subjectId, documentId] });
       setShowClearDialog(false);
       setShowHistoryPanel(false);
+      setActiveSources([]);
+      setSelectedSourceIdx(null);
+      setPageHighlights({});
+      setSourcePageMap({});
     },
   });
 
@@ -347,6 +623,18 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     setShowHistoryPanel(true);
     refetchHistory();
   };
+
+  // Pages in this document that have citations
+  const citedPages = Object.keys(pageHighlights)
+    .map(Number)
+    .filter((p) => Object.keys(pageHighlights[p] || {}).length > 0)
+    .sort((a, b) => a - b);
+
+  const citationsOnCurrentPage = pageHighlights[currentPage]
+    ? Object.keys(pageHighlights[currentPage]).length
+    : 0;
+
+  const totalCitationsInDoc = citedPages.length;
 
   return (
     <div className="flex-1 flex h-full max-h-screen overflow-hidden">
@@ -371,22 +659,81 @@ export default function StudyWorkspacePage({ params }: PageProps) {
             </span>
           </div>
 
-          {numPages > 0 && (
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8"
-                onClick={() => setScale((s) => Math.max(0.5, s - 0.15))}>
-                <ZoomOut className="w-4 h-4" />
-              </Button>
-              <span className="text-xs text-muted-foreground w-12 text-center">
-                {Math.round(scale * 100)}%
-              </span>
-              <Button variant="ghost" size="icon" className="h-8 w-8"
-                onClick={() => setScale((s) => Math.min(3, s + 0.15))}>
-                <ZoomIn className="w-4 h-4" />
-              </Button>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Highlight Indicator and Controls */}
+            {totalCitationsInDoc > 0 && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 border border-purple-500/25 rounded-lg text-xs text-purple-300">
+                <span className="inline-block w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                <span className="font-medium hidden sm:inline">
+                  {citationsOnCurrentPage > 0
+                    ? `Source on p.${currentPage}`
+                    : `${totalCitationsInDoc} cited page${totalCitationsInDoc > 1 ? "s" : ""}`}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-purple-300 hover:text-purple-100 hover:bg-purple-500/20 cursor-pointer"
+                  onClick={() => setShowHighlights((v) => !v)}
+                  title={showHighlights ? "Hide light purple highlights" : "Show light purple highlights"}
+                >
+                  {showHighlights ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                </Button>
+              </div>
+            )}
+
+            {numPages > 0 && (
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8"
+                  onClick={() => setScale((s) => Math.max(0.5, s - 0.15))}>
+                  <ZoomOut className="w-4 h-4" />
+                </Button>
+                <span className="text-xs text-muted-foreground w-12 text-center">
+                  {Math.round(scale * 100)}%
+                </span>
+                <Button variant="ghost" size="icon" className="h-8 w-8"
+                  onClick={() => setScale((s) => Math.min(3, s + 0.15))}>
+                  <ZoomIn className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* AI Grounding Banner when highlights exist */}
+        {showHighlights && totalCitationsInDoc > 0 && (
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-1.5 bg-purple-950/25 border-b border-purple-500/20 text-xs text-purple-200">
+            <div className="flex items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-medium text-[11px] border border-purple-500/30 flex items-center gap-1">
+                <Highlighter className="w-3 h-3 text-purple-300" />
+                Cited Sources
+              </span>
+              <span className="text-purple-200/90 text-xs hidden sm:inline">
+                Light purple highlights show cited source text in this document
+              </span>
+            </div>
+
+            {/* Jump to cited pages */}
+            {citedPages.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground hidden md:inline">Cited:</span>
+                {citedPages.map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-xs font-medium transition-all cursor-pointer",
+                      currentPage === page
+                        ? "bg-purple-600 text-white shadow-sm ring-1 ring-purple-400"
+                        : "bg-purple-500/10 text-purple-300 hover:bg-purple-500/25"
+                    )}
+                  >
+                    p.{page}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Page navigation */}
         {numPages > 0 && (
@@ -435,7 +782,15 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                 </div>
               }
             >
-              <Page pageNumber={currentPage} scale={scale} className="shadow-lg my-4"
+              <Page
+                key={`page-${currentPage}-scale-${scale}-hl-${highlightsVersion}`}
+                pageNumber={currentPage}
+                scale={scale}
+                customTextRenderer={customTextRenderer}
+                onRenderSuccess={() => {
+                  setTimeout(scrollToHighlight, 120);
+                }}
+                className="shadow-lg my-4 relative"
                 loading={
                   <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -561,7 +916,16 @@ export default function StudyWorkspacePage({ params }: PageProps) {
           )}
 
           {chatMessages.map((message, idx) => (
-            <MessageBubble key={idx} message={message} />
+            <MessageBubble
+              key={idx}
+              message={message}
+              activeSourceIdx={selectedSourceIdx}
+              activeSources={activeSources}
+              sourcePageMap={sourcePageMap}
+              currentDocName={docMeta?.filename}
+              onSelectSource={handleSelectSource}
+              onOpenOtherDoc={handleOpenOtherDoc}
+            />
           ))}
 
           {queryMutation.isPending && (
@@ -664,7 +1028,19 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                   </div>
                 ) : (
                   chatHistory.map((message, idx) => (
-                    <MessageBubble key={idx} message={message} />
+                    <MessageBubble
+                      key={idx}
+                      message={message}
+                      activeSourceIdx={selectedSourceIdx}
+                      activeSources={activeSources}
+                      sourcePageMap={sourcePageMap}
+                      currentDocName={docMeta?.filename}
+                      onSelectSource={(source, sIdx, allSources) => {
+                        handleSelectSource(source, sIdx, allSources);
+                        setShowHistoryPanel(false);
+                      }}
+                      onOpenOtherDoc={handleOpenOtherDoc}
+                    />
                   ))
                 )}
               </div>

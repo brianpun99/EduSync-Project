@@ -148,7 +148,7 @@ function QuizContent() {
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      if (!quizData || !subjectId) return;
+      if (!quizData || !subjectId) throw new Error("Missing quiz data");
       
       const payloadAnswers = quizData.questions.map((q, idx) => ({
         question_index: idx,

@@ -123,3 +123,39 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── PDF Source Text Highlighting ────────────────────────────────────────── */
+.textLayer mark.source-highlight {
+  /* Soft, semi-transparent light purple background (ensures text is never blocked) */
+  background-color: rgba(216, 180, 254, 0.45);
+  /* Transparent text ensures the crisp vector glyphs from the PDF canvas shine through completely */
+  color: transparent !important;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.55);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.textLayer mark.source-highlight:hover {
+  background-color: rgba(192, 132, 252, 0.65);
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.75);
+}
+
+.textLayer mark.source-highlight.active {
+  background-color: rgba(192, 132, 252, 0.7);
+  box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.9), 0 0 10px rgba(168, 85, 247, 0.5);
+  animation: pulse-source-glow 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-source-glow {
+  0%, 100% {
+    background-color: rgba(192, 132, 252, 0.7);
+    box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.9), 0 0 8px rgba(168, 85, 247, 0.4);
+  }
+  50% {
+    background-color: rgba(216, 180, 254, 0.45);
+    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.6), 0 0 4px rgba(168, 85, 247, 0.2);
+  }
+}
+
