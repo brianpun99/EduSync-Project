@@ -19,3 +19,6 @@ chroma_data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local testing documents and execution evidence
+/docs/testing/

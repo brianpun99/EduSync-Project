@@ -54,9 +54,9 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
 RETRIEVAL_TOP_K = 5
 
-# --- Cloud inference (Groq / Llama-3) -------------------------------------
+# --- Cloud inference (Groq) -------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 # --- Auth / session -------------------------------------------------------
 JWT_SECRET = os.getenv("EDUSYNC_JWT_SECRET", "change-me-in-production")
