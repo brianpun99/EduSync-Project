@@ -71,7 +71,41 @@ def _format_context(chunks: List[dict]) -> str:
 def answer_question(subject_id: int, question: str, document_ids: list[int] | None = None) -> dict:
     client = _require_client()
     chunks = retrieve_relevant_chunks(subject_id, question, document_ids=document_ids)
-    context = _format_context(chunks)
+
+    # ── Filter out noise chunks: determine if any chunks are actually relevant ──
+    # If top chunk has score < 0.12, the context does not match the prompt at all
+    top_score = chunks[0]["score"] if chunks else 0.0
+    is_off_topic_or_irrelevant = (not chunks) or (top_score < 0.12)
+
+    if is_off_topic_or_irrelevant:
+        # Prompt the model to handle conversational questions or gracefully state
+        # that the query is not covered in the current study documents.
+        completion = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are EduSync, a helpful study assistant. The user's query does not match any content "
+                        "in their uploaded study materials. If the query is a friendly greeting (like 'hi' or 'who are you'), "
+                        "introduce yourself pleasantly and offer to help study their materials. If the query is asking about a "
+                        "specific topic or concept, explain c1learly and politely that the uploaded documents do not contain information "
+                        "about that topic, and suggest they upload relevant notes or rephrase."
+                    ),
+                },
+                {"role": "user", "content": question},
+            ],
+            temperature=0.3,
+        )
+        answer_text = completion.choices[0].message.content
+        return {"answer": answer_text, "sources": []}
+
+    # Format context only from relevant chunks (drop distant noise chunks)
+    relevant_context_chunks = [c for c in chunks if c["score"] >= 0.10 and c["score"] >= top_score * 0.30]
+    if not relevant_context_chunks:
+        relevant_context_chunks = chunks[:2]
+
+    context = _format_context(relevant_context_chunks)
 
     completion = client.chat.completions.create(
         model=GROQ_MODEL,
@@ -83,11 +117,37 @@ def answer_question(subject_id: int, question: str, document_ids: list[int] | No
     )
     answer_text = completion.choices[0].message.content
 
+    # If the model explicitly stated that the context does not contain the answer, do not cite false sources
+    not_found_phrases = [
+        "context does not contain",
+        "context doesn't contain",
+        "not mentioned in the context",
+        "no information provided in the context",
+        "not found in the provided context",
+        "context provided does not",
+        "context does not provide",
+        "provided context has no",
+        "not enough information in the context",
+        "information is not present in the context",
+    ]
+    lower_ans = answer_text.lower()
+    if any(phrase in lower_ans for phrase in not_found_phrases):
+        return {"answer": answer_text, "sources": []}
+
+    # Only include sources with meaningful score that contributed to the answer
     sources = [
-        {"document": c["filename"], "snippet": c["text"][:200], "score": c["score"]}
-        for c in chunks
+        {
+            "document": c["filename"],
+            "document_id": c.get("document_id"),
+            "pageNumber": c.get("page_number"),
+            "snippet": c["text"][:200],
+            "score": c["score"],
+        }
+        for c in relevant_context_chunks
+        if c["score"] >= 0.12
     ]
     return {"answer": answer_text, "sources": sources}
+
 
 
 import concurrent.futures

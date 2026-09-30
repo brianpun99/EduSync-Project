@@ -33,7 +33,9 @@ export function normalizeText(str: string): string {
   return str
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
-    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/[\u2013\u2014\u2212]/g, "-")
+    .replace(/[●•▪▫■◆◦*]/g, " ")
+    .replace(/[\u00a0\u200b\u202f\u3000]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
@@ -90,7 +92,9 @@ export function buildPageMapping(
     let ch = pageText[i];
     if (/[\u2018\u2019]/.test(ch)) ch = "'";
     else if (/[\u201C\u201D]/.test(ch)) ch = '"';
-    else if (/[\u2013\u2014]/.test(ch)) ch = "-";
+    else if (/[\u2013\u2014\u2212]/.test(ch)) ch = "-";
+    else if (/[●•▪▫■◆◦*]/.test(ch)) ch = " ";
+    else if (/[\u00a0\u200b\u202f\u3000]/.test(ch)) ch = " ";
 
     if (/\s/.test(ch)) {
       if (!inSpace) {
@@ -124,34 +128,47 @@ export function findSnippetMatchesInPage(
 
   const { charToItem, normToRaw, normText } = buildPageMapping(items);
   const normSnippet = normalizeText(snippet);
-  if (!normSnippet) return [];
+  if (!normSnippet || normSnippet.length < 12) return [];
 
-  // Generate fallback candidates in order of precision:
-  // 1. Full normalized snippet
-  // 2. Sentences of significant length (>= 20 chars)
-  // 3. First 10 words
-  const candidates: string[] = [normSnippet];
+  // Truncate partial trailing word if snippet was chopped off at 200 chars
+  const cleanSnippet = normSnippet.replace(/\s+\S+$/, "").trim();
 
+  // Extract individual complete sentences (>= 18 chars)
   const sentences = normSnippet
     .split(/[.!?\n]+/)
     .map((s) => s.trim())
-    .filter((s) => s.length >= 20);
+    .filter((s) => s.length >= 18);
 
-  for (const s of sentences) {
-    if (!candidates.includes(s)) candidates.push(s);
+  const candidates: string[] = [];
+  if (cleanSnippet.length >= 25 && !candidates.includes(cleanSnippet)) {
+    candidates.push(cleanSnippet);
+  }
+  if (!candidates.includes(normSnippet)) {
+    candidates.push(normSnippet);
   }
 
-  const words = normSnippet.split(" ");
-  if (words.length > 6) {
-    const firstChunk = words.slice(0, 10).join(" ");
-    if (!candidates.includes(firstChunk)) candidates.push(firstChunk);
+  // Sort sentences by descending length (longest and most specific first)
+  const sortedSentences = [...sentences].sort((a, b) => b.length - a.length);
+  for (const s of sortedSentences) {
+    if (!candidates.includes(s) && s.length >= 20) {
+      candidates.push(s);
+    }
+  }
+
+  // Word chunk fallback (at least 6 words, >= 25 chars)
+  const words = cleanSnippet.split(" ");
+  if (words.length >= 6) {
+    const chunk = words.slice(0, 10).join(" ");
+    if (chunk.length >= 25 && !candidates.includes(chunk)) {
+      candidates.push(chunk);
+    }
   }
 
   const rawMatches: Array<{ rawStart: number; rawEnd: number }> = [];
 
   for (const cand of candidates) {
     let searchFrom = 0;
-    let foundAny = false;
+    let foundThisCand = false;
     while (searchFrom < normText.length) {
       const idx = normText.indexOf(cand, searchFrom);
       if (idx === -1) break;
@@ -160,15 +177,23 @@ export function findSnippetMatchesInPage(
       const endCharIdx = idx + cand.length - 1;
       const rawEnd = (endCharIdx < normToRaw.length ? normToRaw[endCharIdx] : rawStart + cand.length) + 1;
 
-      rawMatches.push({ rawStart, rawEnd });
-      foundAny = true;
+      // Avoid overlapping with existing matches
+      const hasOverlap = rawMatches.some((m) => !(rawEnd <= m.rawStart || rawStart >= m.rawEnd));
+      if (!hasOverlap) {
+        rawMatches.push({ rawStart, rawEnd });
+        foundThisCand = true;
+      }
       searchFrom = idx + cand.length;
     }
-    // If the higher-priority candidate matched, do not duplicate with smaller fragments
-    if (foundAny) break;
+
+    // If a long candidate (>= 40 chars) matched, it already covers the core passage
+    if (foundThisCand && cand.length >= 40) {
+      break;
+    }
   }
 
   if (rawMatches.length === 0) return [];
+
 
   const itemMatches = new Map<number, HighlightRange[]>();
 

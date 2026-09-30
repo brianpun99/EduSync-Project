@@ -71,6 +71,9 @@ class SourceChunk(BaseModel):
     document: str
     snippet: str
     score: float
+    document_id: Optional[int] = None
+    pageNumber: Optional[int] = None
+
 
 
 class QueryResponse(BaseModel):

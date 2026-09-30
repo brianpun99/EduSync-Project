@@ -65,6 +65,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 interface Source {
   document: string;
+  document_id?: number;
   snippet: string;
   score: number;
   pageNumber?: number;
@@ -98,6 +99,7 @@ interface MessageBubbleProps {
   activeSources: Source[];
   sourcePageMap: Record<number, number>;
   currentDocName?: string;
+  currentDocId?: number;
   onSelectSource: (source: Source, index: number, allSources: Source[]) => void;
   onOpenOtherDoc?: (docName: string) => void;
 }
@@ -108,6 +110,7 @@ function MessageBubble({
   activeSources,
   sourcePageMap,
   currentDocName,
+  currentDocId,
   onSelectSource,
   onOpenOtherDoc,
 }: MessageBubbleProps) {
@@ -168,7 +171,10 @@ function MessageBubble({
             </div>
             <div className="flex flex-wrap gap-1.5">
               {message.sources.map((source, sIdx) => {
-                const isCurrentDoc = !currentDocName || source.document === currentDocName;
+                const isCurrentDoc =
+                  source.document_id != null && currentDocId != null
+                    ? source.document_id === currentDocId
+                    : !currentDocName || source.document === currentDocName;
                 const pageNumber = sourcePageMap[sIdx] ?? source.pageNumber;
                 const isSelected =
                   activeSources.includes(source) &&
@@ -304,13 +310,23 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     },
   });
 
-  // ── Reset highlights & cache when documentId changes ────────────────────────
+  // ── Reset highlights & state when documentId changes ───────────────────────
   useEffect(() => {
-    pageItemsCacheRef.current.clear();
+    const nextDocId = parseInt(documentId, 10);
+    if (!isNaN(nextDocId)) {
+      setSelectedDocIds(new Set([nextDocId]));
+    }
+    setChatMessages([]);
+    setActiveSources([]);
+    setSelectedSourceIdx(null);
     setPageHighlights({});
     setSourcePageMap({});
-    setSelectedSourceIdx(null);
+    setNumPages(0);
+    setCurrentPage(1);
+    setPdfUrl(null);
+    setPdfError(null);
     setPdfProxy(null);
+    pageItemsCacheRef.current.clear();
   }, [documentId]);
 
   // ── Fetch persisted history (kept separate — not auto-loaded into chat) ─────
@@ -389,12 +405,21 @@ export default function StudyWorkspacePage({ params }: PageProps) {
 
     async function processHighlights() {
       const currentFileName = docMeta?.filename;
+      const currentDocIdNum = parseInt(documentId, 10);
       const newPageHighlights: Record<number, Record<number, HighlightRange[]>> = {};
       const newSourcePageMap: Record<number, number> = {};
 
       const relevant = activeSources
         .map((s, idx) => ({ ...s, originalIdx: idx }))
-        .filter((s) => !currentFileName || s.document === currentFileName);
+        .filter((s) => {
+          if (s.document_id != null && !isNaN(currentDocIdNum)) {
+            return s.document_id === currentDocIdNum;
+          }
+          if (currentFileName) {
+            return s.document === currentFileName;
+          }
+          return true;
+        });
 
       if (relevant.length === 0) {
         if (isMounted) {
@@ -428,7 +453,18 @@ export default function StudyWorkspacePage({ params }: PageProps) {
           (selectedSourceIdx === null && src.originalIdx === 0);
         let firstMatchedPage: number | null = null;
 
+        // If source has a known pageNumber, prioritize checking that page first
+        const pagesToCheck: number[] = [];
+        if (src.pageNumber && src.pageNumber >= 1 && src.pageNumber <= pdfProxy.numPages) {
+          pagesToCheck.push(src.pageNumber);
+        }
         for (let p = 1; p <= pdfProxy.numPages; p++) {
+          if (!pagesToCheck.includes(p)) {
+            pagesToCheck.push(p);
+          }
+        }
+
+        for (const p of pagesToCheck) {
           const items = pageItemsCacheRef.current.get(p);
           if (!items || items.length === 0) continue;
 
@@ -452,11 +488,19 @@ export default function StudyWorkspacePage({ params }: PageProps) {
               }
               newPageHighlights[p][m.itemIndex].push(...m.ranges);
             }
+            // If we matched the page indicated by backend metadata, avoid highlighting false positives elsewhere
+            if (src.pageNumber && p === src.pageNumber) {
+              break;
+            }
           }
         }
 
-        if (firstMatchedPage !== null) {
-          newSourcePageMap[src.originalIdx] = firstMatchedPage;
+        const resolvedPage =
+          firstMatchedPage ??
+          (src.pageNumber && src.pageNumber <= pdfProxy.numPages ? src.pageNumber : null);
+
+        if (resolvedPage !== null) {
+          newSourcePageMap[src.originalIdx] = resolvedPage;
         }
       }
 
@@ -479,7 +523,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
     return () => {
       isMounted = false;
     };
-  }, [pdfProxy, activeSources, selectedSourceIdx, docMeta?.filename]);
+  }, [pdfProxy, activeSources, selectedSourceIdx, docMeta?.filename, documentId]);
 
   // ── Custom text renderer for react-pdf Page ────────────────────────────────
   const customTextRenderer = useCallback(
@@ -923,6 +967,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
               activeSources={activeSources}
               sourcePageMap={sourcePageMap}
               currentDocName={docMeta?.filename}
+              currentDocId={currentDocId}
               onSelectSource={handleSelectSource}
               onOpenOtherDoc={handleOpenOtherDoc}
             />
@@ -1035,6 +1080,7 @@ export default function StudyWorkspacePage({ params }: PageProps) {
                       activeSources={activeSources}
                       sourcePageMap={sourcePageMap}
                       currentDocName={docMeta?.filename}
+                      currentDocId={currentDocId}
                       onSelectSource={(source, sIdx, allSources) => {
                         handleSelectSource(source, sIdx, allSources);
                         setShowHistoryPanel(false);

@@ -37,14 +37,22 @@ def get_collection(subject_id: int):
     return _chroma_client.get_or_create_collection(name=_collection_name(subject_id))
 
 
-def extract_text_pdf(file_path: Path) -> tuple[str, int]:
+def extract_pdf_pages(file_path: Path) -> list[tuple[int, str]]:
     doc = fitz.open(file_path)
+    pages = []
     try:
-        page_count = doc.page_count
-        text = "\n\n".join(page.get_text() for page in doc)
+        for idx in range(doc.page_count):
+            page_text = doc[idx].get_text()
+            pages.append((idx + 1, page_text))
     finally:
         doc.close()
-    return text, page_count
+    return pages
+
+
+def extract_text_pdf(file_path: Path) -> tuple[str, int]:
+    pages = extract_pdf_pages(file_path)
+    text = "\n\n".join(p[1] for p in pages)
+    return text, len(pages)
 
 
 def extract_text(file_path: Path) -> tuple[str, int]:
@@ -54,9 +62,22 @@ def extract_text(file_path: Path) -> tuple[str, int]:
     raise ValueError(f"Unsupported file type: {suffix}")
 
 
+def chunk_document_pages(pages: list[tuple[int, str]]) -> list[dict]:
+    chunks = []
+    for page_num, text in pages:
+        clean = text.strip()
+        if not clean:
+            continue
+        page_chunks = _splitter.split_text(clean)
+        for c in page_chunks:
+            s = c.strip()
+            if len(s) > 20:
+                chunks.append({"text": s, "page_number": page_num})
+    return chunks
+
+
 def chunk_text(text: str) -> List[str]:
     chunks = _splitter.split_text(text)
-    # Drop near-empty fragments (headers, page numbers, stray whitespace).
     return [c.strip() for c in chunks if len(c.strip()) > 20]
 
 
@@ -68,25 +89,40 @@ def ingest_document(
 ) -> tuple[int, int]:
     """
     Extracts, chunks, and vectorizes a document into the subject's local
-    ChromaDB collection.
+    ChromaDB collection with page-level metadata.
 
     Returns (page_count, chunk_count).
     """
-    text, page_count = extract_text(file_path)
-    chunks = chunk_text(text)
+    suffix = file_path.suffix.lower()
+    if suffix != ".pdf":
+        raise ValueError(f"Unsupported file type: {suffix}")
 
-    if chunks:
+    pages = extract_pdf_pages(file_path)
+    page_count = len(pages)
+    chunk_items = chunk_document_pages(pages)
+
+    if chunk_items:
         collection = get_collection(subject_id)
-        ids = [f"doc{document_id}_chunk{i}" for i in range(len(chunks))]
-        metadatas = [
-            {"document_id": document_id, "filename": filename, "chunk_index": i}
-            for i in range(len(chunks))
-        ]
-        # ChromaDB's default embedding function runs locally (all-MiniLM-L6-v2),
-        # so no text is sent anywhere during this call.
-        collection.add(ids=ids, documents=chunks, metadatas=metadatas)
+        # Remove any existing vectors for this document first to avoid duplication
+        try:
+            collection.delete(where={"document_id": document_id})
+        except Exception:
+            pass
 
-    return page_count, len(chunks)
+        ids = [f"doc{document_id}_chunk{i}" for i in range(len(chunk_items))]
+        documents = [c["text"] for c in chunk_items]
+        metadatas = [
+            {
+                "document_id": document_id,
+                "filename": filename,
+                "chunk_index": i,
+                "page_number": chunk_items[i]["page_number"],
+            }
+            for i in range(len(chunk_items))
+        ]
+        collection.add(ids=ids, documents=documents, metadatas=metadatas)
+
+    return page_count, len(chunk_items)
 
 
 def delete_document_vectors(subject_id: int, document_id: int) -> None:
@@ -140,6 +176,8 @@ def retrieve_relevant_chunks(
                         {
                             "text": doc_text,
                             "filename": meta.get("filename", "unknown"),
+                            "document_id": meta.get("document_id", doc_id),
+                            "page_number": meta.get("page_number"),
                             "score": round(max(0.0, 1 - distance), 3),
                         }
                     )
@@ -168,7 +206,10 @@ def retrieve_relevant_chunks(
             {
                 "text": doc_text,
                 "filename": meta.get("filename", "unknown"),
+                "document_id": meta.get("document_id"),
+                "page_number": meta.get("page_number"),
                 "score": round(max(0.0, 1 - distance), 3),
             }
         )
     return chunks
+
