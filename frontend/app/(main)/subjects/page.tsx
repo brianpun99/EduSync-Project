@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, type DragEvent, type KeyboardEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,6 +53,8 @@ export default function SubjectsPage() {
   const [selectedSubject, setSelectedSubject] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragDepthRef = useRef(0);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   const [subjectToDelete, setSubjectToDelete] = useState<Subject | null>(null);
   const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
@@ -134,14 +136,49 @@ export default function SubjectsPage() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      uploadDocumentMutation.mutate(file);
+  const uploadFile = (file: File | undefined) => {
+    if (!file || uploadDocumentMutation.isPending) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      alert("Please select a PDF file.");
+      return;
     }
+    uploadDocumentMutation.mutate(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    uploadFile(e.target.files?.[0]);
     // reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current += 1;
+    setIsDraggingFile(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDraggingFile(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current = 0;
+    setIsDraggingFile(false);
+    uploadFile(e.dataTransfer.files[0]);
+  };
+
+  const handleDropZoneKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (!uploadDocumentMutation.isPending) fileInputRef.current?.click();
     }
   };
 
@@ -202,8 +239,20 @@ export default function SubjectsPage() {
 
         {/* Upload Drop Zone */}
         <div 
-          className="border-2 border-dashed border-border rounded-xl p-8 text-center bg-secondary/20 hover:bg-secondary/30 transition-colors cursor-pointer"
-          onClick={() => fileInputRef.current?.click()}
+          className={cn(
+            "border-2 border-dashed rounded-xl p-8 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            uploadDocumentMutation.isPending ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+            isDraggingFile ? "border-primary bg-primary/10" : "border-border bg-secondary/20 hover:bg-secondary/30"
+          )}
+          role="button"
+          tabIndex={uploadDocumentMutation.isPending ? -1 : 0}
+          aria-disabled={uploadDocumentMutation.isPending}
+          onClick={() => !uploadDocumentMutation.isPending && fileInputRef.current?.click()}
+          onKeyDown={handleDropZoneKeyDown}
+          onDragEnter={handleDragEnter}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
           <div className="flex flex-col items-center gap-2">
             <FileText className="w-10 h-10 text-muted-foreground" />
